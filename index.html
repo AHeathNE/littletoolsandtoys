@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Interactive Button and Image Layout</title>
+    <style>
+  rel="stylesheet"
+  href="https://unpkg.com/98.css"
+        /* Modern reset and font setup */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            padding: 40px 20px;
+        }
+
+        /* Container that holds the two columns */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            gap: 40px; /* Space between text and images */
+            align-items: flex-start; /* Aligns content to the top */
+        }
+
+        /* Left side: Text content and button list */
+        .text-column {
+            flex: 1; /* Takes up 50% width */
+        }
+        .text-column h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #111;
+        }
+        .text-column p {
+            margin-bottom: 25px;
+            font-size: 1.1rem;
+        }
+
+        /* Button list container */
+        .button-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            list-style: none;
+        }
+
+
+
+        }
+
+        /* Right side: Image display window */
+        .image-column {
+            flex: 1; /* Takes up 50% width */
+            position: relative;
+            min-height: 400px;
+        }
+        
+        /* Image presentation layout */
+        .image-column img {
+            width: 450px;
+            height: 100%;
+            object-fit: cover; /* Prevents image distortion */
+            display: none; /* Hide all images by default */
+        }
+
+        /* Style for the currently active visible image */
+        .image-column img.active {
+            display: block;
+
+        }
+
+        /* Responsive Design: Stacks columns on mobile screens */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .text-column, .image-column {
+                width: 100%;
+            }
+            .image-column {
+                min-height: auto;
+            }
+            .image-column img {
+                height: 300px;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Left Side: Writing and Controls -->
+        <div class="text-column">
+            <h1>Design Tools and Toys</h1>
+                <p id="myParagraph">This is the original text.</p>
+            
+            <!-- List of targeted trigger buttons -->
+            <ul class="button-list">
+                <li><button class="nav-btn active" data-target="img-info" onclick="changeText1()">*Project Info*</button></li>
+                <li><button class="nav-btn" data-target="img-comp" onclick="changeText2()">Compressor</button></li>
+                <li><button class="nav-btn" data-target="img-bitm" onclick="changeText3()">Bitmap</button></li>
+                <li><button class="nav-btn" data-target="img-crop" onclick="changeText4()">Cropper</button></li>
+                <li><button class="nav-btn" data-target="img-dial" onclick="changeText5()">Dial-Up Gifs</button></li>
+                <li><button class="nav-btn" data-target="img-duot" onclick="changeText6()">DuoTone</button></li>
+                <li><button class="nav-btn" data-target="img-shif" onclick="changeText7()">Shifter</button></li>
+                <li><button class="nav-btn" data-target="img-tile" onclick="changeText8()">Tiler</button></li>
+                <li><button class="nav-btn" data-target="img-post" onclick="changeText9()">Posterizer</button></li>
+                <li><button class="nav-btn" data-target="img-cont" onclick="changeText10()">Contrast</button></li>
+            </ul>
+        </div>
+
+        <!-- Right Side: Conditional Image Gallery Container -->
+        <div class="image-column">
+            <!-- Images mapped explicitly to the data-target attributes above -->
+            <img id="img-info" class="active" src="images/Painting.jpg" alt="Painting of a man and woman">
+            <img id="img-comp" src="images/comp.jpg" alt="Low Quality jpeg of Painting">
+            <img id="img-bitm" src="images/bitm.bmp" alt="Bitmap of Painting">
+            <img id="img-crop" src="images/crop.png" alt="Cropped Image of Painting">
+            <img id="img-dial" src="images/dial.gif" alt="Slowly loading gif of Painting">
+            <img id="img-duot" src="images/duot.png" alt="Duotone image of Painting">
+            <img id="img-shif" src="images/shif.png" alt="Pixel Shifted image of Painting">
+            <img id="img-tile" src="images/tile.png" alt="Cut up image of Painting">
+            <img id="img-post" src="images/post.png" alt="Posterized image of Painting">
+            <img id="img-cont" src="images/cont.png" alt="Black and White image of Painting">
+        </div>
+    </div>
+
+    <!-- Active Swapping Tab Logic Script -->
+    <script>
+        const buttons = document.querySelectorAll('.nav-btn');
+        const images = document.querySelectorAll('.image-column img');
+
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove the highlighted styling from all other buttons
+                buttons.forEach(b => b.classList.remove('active'));
+                
+                // Hide all standard display images
+                images.forEach(img => img.classList.remove('active'));
+
+                // Add active visual state to the clicked button
+                btn.classList.add('active');
+
+                // Read custom target key and unlock matching image by ID
+                const targetId = btn.getAttribute('data-target');
+                const targetImage = document.getElementById(targetId);
+                if (targetImage) {
+                    targetImage.classList.add('active');
+                }
+            });
+        }); 
+    </script>
+
+   <script>
+        // The JavaScript function called by the button
+        function changeText1() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "The text has been changed!";
+        }
+   function changeText2() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "Now the text is saying something else!";
+        }
+  function changeText3() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "A third thing!";
+        }
+        function changeText4() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "And now a fourth!";
+        }
+        function changeText5() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "And now a Fifth!";
+        }
+        function changeText6() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "And now a 6th!";
+        }
+        function changeText7() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "And now a fourth!";
+        }
+        function changeText8() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "And now a fourth!";
+        }
+        function changeText9() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "And now a fourth!";
+        }
+        function changeText10() {
+            // Find the paragraph by its ID and change its text
+            document.getElementById("myParagraph").textContent = "And now a fourth!";
+        }
+    </script>
+
+
+</body>
+</html>
+
