@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image Editor</title>
+</head>
+<body style="font-family: sans-serif; max-width: 700px; margin: 20px auto;">
+
+<h2>Image Editor</h2>
+<p>Upload an image, adjust the options, then download the PNG.</p>
+
+<p>
+  <input type="file" id="fileInput" accept="image/*">
+</p>
+
+<table>
+  <tr>
+    <td><label for="contrast">Contrast boost:</label></td>
+    <td><input type="range" id="contrast" min="0" max="150" value="0" oninput="render()"></td>
+  </tr>
+  <tr>
+    <td><label for="grayscale">Black &amp; white:</label></td>
+    <td><input type="checkbox" id="grayscale" onchange="render()"></td>
+  </tr>
+  <tr>
+    <td><label for="transparent">Remove white (transparent):</label></td>
+    <td><input type="checkbox" id="transparent" onchange="render()"></td>
+  </tr>
+  <tr>
+    <td><label for="threshold">White threshold:</label></td>
+    <td><input type="range" id="threshold" min="180" max="255" value="235" oninput="render()"></td>
+  </tr>
+  <tr>
+    <td><label for="feather">Edge softness:</label></td>
+    <td><input type="range" id="feather" min="0" max="60" value="20" oninput="render()"></td>
+  </tr>
+  <tr>
+    <td><label for="forceBlack">Make non-white pixels black:</label></td>
+    <td><input type="checkbox" id="forceBlack" onchange="render()"></td>
+  </tr>
+</table>
+
+<p>
+  <button onclick="download()">Download PNG</button>
+</p>
+
+<p>
+  Original:<br>
+  <canvas id="srcCanvas" style="max-width:100%; border:1px solid #ccc;"></canvas>
+</p>
+
+<p>
+  Preview:<br>
+  <canvas id="outCanvas" style="max-width:100%; border:1px solid #ccc; background-image: linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%); background-size:16px 16px; background-position:0 0,0 8px,8px -8px,-8px 0;"></canvas>
+</p>
+
+<script>
+let img = null;
+
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    img = new Image();
+    img.onload = function() {
+      const srcCanvas = document.getElementById('srcCanvas');
+      const outCanvas = document.getElementById('outCanvas');
+      srcCanvas.width = outCanvas.width = img.width;
+      srcCanvas.height = outCanvas.height = img.height;
+      srcCanvas.getContext('2d').drawImage(img, 0, 0);
+      render();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+function clamp(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+function render() {
+  if (!img) return;
+  const outCanvas = document.getElementById('outCanvas');
+  const ctx = outCanvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+  const data = imageData.data;
+
+  const contrastAmt = parseInt(document.getElementById('contrast').value, 10);
+  const factor = (259 * (contrastAmt + 255)) / (255 * (259 - contrastAmt));
+  const doGray = document.getElementById('grayscale').checked;
+  const doTransparent = document.getElementById('transparent').checked;
+  const threshold = parseInt(document.getElementById('threshold').value, 10);
+  const feather = parseInt(document.getElementById('feather').value, 10) || 1;
+  const doForceBlack = document.getElementById('forceBlack').checked;
+
+  for (let i = 0; i < data.length; i += 4) {
+    let r = data[i], g = data[i+1], b = data[i+2];
+
+    if (contrastAmt > 0) {
+      r = clamp((r - 128) * factor + 128);
+      g = clamp((g - 128) * factor + 128);
+      b = clamp((b - 128) * factor + 128);
+    }
+
+    if (doGray) {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      r = g = b = lum;
+    }
+
+    data[i] = r; data[i+1] = g; data[i+2] = b;
+
+    if (doTransparent) {
+      const brightness = (r + g + b) / 3;
+      if (brightness >= threshold) {
+        data[i+3] = 0;
+      } else if (brightness >= threshold - feather) {
+        data[i+3] = clamp(255 * (threshold - brightness) / feather);
+      }
+    }
+
+    if (doForceBlack) {
+      const isWhite = doTransparent ? data[i+3] === 0 : (r >= 250 && g >= 250 && b >= 250);
+      if (!isWhite) {
+        data[i] = 0; data[i+1] = 0; data[i+2] = 0;
+      }
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function download() {
+  const outCanvas = document.getElementById('outCanvas');
+  const link = document.createElement('a');
+  link.download = 'edited-image.png';
+  link.href = outCanvas.toDataURL('image/png');
+  link.click();
+}
+</script>
+
+</body>
+</html>

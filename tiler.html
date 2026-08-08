@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tile cutter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  body{ font:14px/1.4 system-ui, sans-serif; max-width:900px; margin:20px auto; padding:0 16px; }
+  fieldset{ margin-bottom:14px; }
+  legend{ font-weight:bold; }
+  label{ display:inline-block; margin:4px 10px 4px 0; }
+  #boardOuter{
+    position:relative;
+    background: repeating-conic-gradient(#ddd 0% 25%, #eee 0% 50%) 0 0 / 20px 20px;
+    border:1px solid #999;
+    overflow:visible;
+    margin-top:12px;
+  }
+  #boardInner{ position:relative; transform-origin:top left; }
+  .tile{ position:absolute; cursor:grab; outline:1px solid rgba(0,0,0,0.4); }
+  .tile:active{ cursor:grabbing; }
+  .tile canvas{ display:block; width:100%; height:100%; pointer-events:none; }
+  button{ margin:2px 6px 2px 0; }
+</style>
+</head>
+<body>
+
+<h1>Tile cutter</h1>
+<p>Slice an image into a grid of tiles, optionally tilt and rearrange them, then export.</p>
+
+<fieldset>
+  <legend>Source image</legend>
+  <input type="file" id="fileInput" accept="image/*" onchange="handleFileInput(event)">
+  <span id="imgStat"></span>
+</fieldset>
+
+<fieldset>
+  <legend>Grid</legend>
+  <label>Columns
+    <input type="range" id="colsRange" min="1" max="16" value="4" step="1" oninput="colsOut.value=this.value; if(state.img) buildGrid()">
+    <output id="colsOut">4</output>
+  </label>
+  <br>
+  <label id="rowsLabel">Rows
+    <input type="range" id="rowsRange" min="1" max="16" value="4" step="1" oninput="rowsOut.value=this.value; if(state.img) buildGrid()">
+    <output id="rowsOut">4</output>
+  </label>
+  <span id="rowsAuto" hidden>Rows (auto-computed from ratio): <b id="rowsAutoVal">-</b></span>
+  <br>
+  <label>Seam gap
+    <input type="range" id="gapRange" min="0" max="30" value="3" step="1" oninput="gapOut.value=this.value; if(state.img) buildGrid()">
+    <output id="gapOut">3</output>px
+  </label>
+</fieldset>
+
+<fieldset>
+  <legend>Tile ratio</legend>
+  <label><input type="checkbox" id="ratioLock" onchange="handleRatioLock(this.checked)"> Lock tile ratio</label>
+  <span id="ratioOptions" hidden>
+    <select id="ratioPreset" onchange="handleRatioPreset()">
+      <option value="1/1">Square 1:1</option>
+      <option value="4/3">Landscape 4:3</option>
+      <option value="3/2">Landscape 3:2</option>
+      <option value="16/9">Wide 16:9</option>
+      <option value="3/4">Portrait 3:4</option>
+      <option value="2/3">Portrait 2:3</option>
+      <option value="9/16">Tall 9:16</option>
+      <option value="custom">Custom</option>
+    </select>
+    <span id="customRatioRow" hidden>
+      <label>W <input type="number" id="ratioW" value="1" min="0.1" step="0.1" style="width:50px" oninput="handleRatioChange()"></label>
+      <label>H <input type="number" id="ratioH" value="1" min="0.1" step="0.1" style="width:50px" oninput="handleRatioChange()"></label>
+    </span>
+  </span>
+</fieldset>
+
+<fieldset>
+  <legend>Tilt</legend>
+  <label><input type="radio" name="tiltMode" value="none" checked onchange="handleTiltMode(this.value)"> None</label>
+  <label><input type="radio" name="tiltMode" value="uniform" onchange="handleTiltMode(this.value)"> Uniform</label>
+  <label><input type="radio" name="tiltMode" value="random" onchange="handleTiltMode(this.value)"> Random</label>
+  <br>
+  <label>Max angle
+    <input type="range" id="tiltRange" min="0" max="45" value="15" step="1" oninput="tiltOut.value=this.value; handleTiltRange(this.value)">
+    <output id="tiltOut">15</output>&deg;
+  </label>
+</fieldset>
+
+<fieldset>
+  <legend>Layout</legend>
+  <button type="button" id="scatterBtn" disabled onclick="scatterTiles()">Scatter tiles</button>
+  <button type="button" id="resetBtn" disabled onclick="if(state.img) buildGrid()">Reset to grid</button>
+  <p style="margin:4px 0 0; color:#555;">Drag any tile on the board below to reposition it. Tiles may overlap.</p>
+</fieldset>
+
+<fieldset>
+  <legend>Export</legend>
+  <button type="button" id="exportBtn" disabled onclick="exportZip()">Download tiles as ZIP</button>
+  <button type="button" id="exportPngBtn" disabled onclick="exportCompositionPng()">Download composition as PNG</button>
+  <p id="progressLabel" style="color:#555;"></p>
+</fieldset>
+
+<div id="boardOuter" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+  <div id="boardInner"></div>
+</div>
+
+<script>
+var state = {
+  img: null,
+  naturalW: 0,
+  naturalH: 0,
+  ratioLocked: false,
+  ratioValue: 1,
+  tiltMode: 'none',
+  tiltMax: 15,
+  scale: 1,
+  zCounter: 1,
+  tiles: []
+};
+
+var MAX_DISPLAY = 680;
+
+var boardOuter = document.getElementById('boardOuter');
+var boardInner = document.getElementById('boardInner');
+var scatterBtn = document.getElementById('scatterBtn');
+var resetBtn = document.getElementById('resetBtn');
+var exportBtn = document.getElementById('exportBtn');
+var exportPngBtn = document.getElementById('exportPngBtn');
+var imgStat = document.getElementById('imgStat');
+var progressLabel = document.getElementById('progressLabel');
+var colsRange = document.getElementById('colsRange');
+var rowsRange = document.getElementById('rowsRange');
+var rowsLabel = document.getElementById('rowsLabel');
+var rowsAuto = document.getElementById('rowsAuto');
+var rowsAutoVal = document.getElementById('rowsAutoVal');
+var gapRange = document.getElementById('gapRange');
+var ratioOptions = document.getElementById('ratioOptions');
+var ratioPreset = document.getElementById('ratioPreset');
+var customRatioRow = document.getElementById('customRatioRow');
+var ratioW = document.getElementById('ratioW');
+var ratioH = document.getElementById('ratioH');
+
+function handleFileInput(e){
+  if(e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+}
+function handleDrop(e){
+  e.preventDefault();
+  if(e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+}
+
+function loadFile(file){
+  if(!file.type.startsWith('image/')) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var img = new Image();
+    img.onload = function(){
+      state.img = img;
+      state.naturalW = img.naturalWidth;
+      state.naturalH = img.naturalHeight;
+      scatterBtn.disabled = false;
+      resetBtn.disabled = false;
+      exportBtn.disabled = false;
+      exportPngBtn.disabled = false;
+      buildGrid();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleRatioLock(checked){
+  state.ratioLocked = checked;
+  ratioOptions.hidden = !checked;
+  rowsLabel.hidden = checked;
+  rowsAuto.hidden = !checked;
+  handleRatioChange();
+}
+function handleRatioPreset(){
+  customRatioRow.hidden = ratioPreset.value !== 'custom';
+  handleRatioChange();
+}
+function handleRatioChange(){
+  if(ratioPreset.value === 'custom'){
+    var w = parseFloat(ratioW.value) || 1;
+    var h = parseFloat(ratioH.value) || 1;
+    state.ratioValue = w / h;
+  } else {
+    var parts = ratioPreset.value.split('/');
+    state.ratioValue = parseFloat(parts[0]) / parseFloat(parts[1]);
+  }
+  if(state.img) buildGrid();
+}
+function handleTiltMode(mode){
+  state.tiltMode = mode;
+  applyTiltToAll();
+}
+function handleTiltRange(val){
+  state.tiltMax = parseInt(val, 10);
+  applyTiltToAll();
+}
+
+function buildGrid(){
+  var naturalW = state.naturalW, naturalH = state.naturalH;
+  var cols = parseInt(colsRange.value, 10);
+  var rows, tileW, tileH;
+
+  if(state.ratioLocked){
+    tileW = naturalW / cols;
+    tileH = tileW / state.ratioValue;
+    rows = Math.max(1, Math.floor(naturalH / tileH));
+    rowsAutoVal.textContent = rows;
+  } else {
+    rows = parseInt(rowsRange.value, 10);
+    tileW = naturalW / cols;
+    tileH = naturalH / rows;
+  }
+
+  var usedW = tileW * cols;
+  var usedH = tileH * rows;
+  var offsetX = (naturalW - usedW) / 2;
+  var offsetY = (naturalH - usedH) / 2;
+  var gap = parseInt(gapRange.value, 10);
+
+  var srcCanvas = document.createElement('canvas');
+  srcCanvas.width = naturalW;
+  srcCanvas.height = naturalH;
+  var srcCtx = srcCanvas.getContext('2d');
+  srcCtx.drawImage(state.img, 0, 0);
+
+  state.tiles = [];
+  boardInner.innerHTML = '';
+  state.zCounter = 1;
+
+  for(var r = 0; r < rows; r++){
+    for(var c = 0; c < cols; c++){
+      var sx = offsetX + c * tileW;
+      var sy = offsetY + r * tileH;
+      var sw = tileW, sh = tileH;
+
+      var cnv = document.createElement('canvas');
+      cnv.width = Math.max(1, Math.round(sw));
+      cnv.height = Math.max(1, Math.round(sh));
+      var ctx = cnv.getContext('2d');
+      ctx.drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, cnv.width, cnv.height);
+
+      var gx = offsetX + c * tileW + gap / 2;
+      var gy = offsetY + r * tileH + gap / 2;
+      var gw = Math.max(2, tileW - gap);
+      var gh = Math.max(2, tileH - gap);
+
+      var tileData = {
+        id: r + '_' + c, row: r, col: c, canvas: cnv,
+        x: gx, y: gy, w: gw, h: gh,
+        rot: computeInitialRot(),
+        z: ++state.zCounter
+      };
+
+      var div = document.createElement('div');
+      div.className = 'tile';
+      div.style.zIndex = tileData.z;
+      div.appendChild(cnv);
+      boardInner.appendChild(div);
+      tileData.el = div;
+
+      attachDrag(tileData);
+      state.tiles.push(tileData);
+    }
+  }
+
+  boardInner.style.width = naturalW + 'px';
+  boardInner.style.height = naturalH + 'px';
+
+  relayout();
+  applyTiltToAll();
+  imgStat.textContent = naturalW + 'x' + naturalH + 'px, ' + (cols*rows) + ' tiles, ' + Math.round(tileW) + 'x' + Math.round(tileH) + ' each';
+}
+
+function computeInitialRot(){
+  if(state.tiltMode === 'uniform') return state.tiltMax;
+  if(state.tiltMode === 'random') return (Math.random() * 2 - 1) * state.tiltMax;
+  return 0;
+}
+function applyTiltToAll(){
+  state.tiles.forEach(function(t){
+    if(state.tiltMode === 'none') t.rot = 0;
+    else if(state.tiltMode === 'uniform') t.rot = state.tiltMax;
+    else t.rot = (Math.random() * 2 - 1) * state.tiltMax;
+    t.el.style.transform = 'rotate(' + t.rot + 'deg)';
+  });
+}
+function positionTile(t){
+  t.el.style.left = t.x + 'px';
+  t.el.style.top = t.y + 'px';
+  t.el.style.width = t.w + 'px';
+  t.el.style.height = t.h + 'px';
+  t.el.style.transform = 'rotate(' + t.rot + 'deg)';
+}
+function renderAllPositions(){ state.tiles.forEach(positionTile); }
+
+function relayout(){
+  var containerW = boardOuter.parentElement ? boardOuter.parentElement.clientWidth : MAX_DISPLAY;
+  var availW = Math.min(containerW || MAX_DISPLAY, MAX_DISPLAY);
+  var scale = Math.min(availW / state.naturalW, 1);
+  if(state.naturalH * scale > 560) scale = 560 / state.naturalH;
+  state.scale = scale;
+  boardInner.style.transform = 'scale(' + scale + ')';
+  boardOuter.style.width = (state.naturalW * scale) + 'px';
+  boardOuter.style.height = (state.naturalH * scale) + 'px';
+  renderAllPositions();
+}
+window.addEventListener('resize', function(){ if(state.img) relayout(); });
+
+function attachDrag(t){
+  var dragging = false, startX, startY, origX, origY;
+  t.el.addEventListener('pointerdown', function(e){
+    dragging = true;
+    t.el.setPointerCapture(e.pointerId);
+    t.z = ++state.zCounter;
+    t.el.style.zIndex = t.z;
+    startX = e.clientX; startY = e.clientY;
+    origX = t.x; origY = t.y;
+  });
+  t.el.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    t.x = origX + (e.clientX - startX) / state.scale;
+    t.y = origY + (e.clientY - startY) / state.scale;
+    positionTile(t);
+  });
+  function endDrag(){ dragging = false; }
+  t.el.addEventListener('pointerup', endDrag);
+  t.el.addEventListener('pointercancel', endDrag);
+}
+
+function scatterTiles(){
+  var maxX = state.naturalW * 0.9, maxY = state.naturalH * 0.9;
+  state.tiles.forEach(function(t){
+    t.x = Math.random() * maxX - state.naturalW * 0.05;
+    t.y = Math.random() * maxY - state.naturalH * 0.05;
+    if(state.tiltMode === 'none') t.rot = (Math.random() * 2 - 1) * 12;
+    else if(state.tiltMode === 'uniform') t.rot = state.tiltMax;
+    else t.rot = (Math.random() * 2 - 1) * state.tiltMax;
+    t.z = ++state.zCounter;
+    t.el.style.zIndex = t.z;
+    positionTile(t);
+  });
+}
+
+function exportZip(){
+  if(!state.img || !state.tiles.length) return;
+  exportBtn.disabled = true;
+  progressLabel.textContent = 'Packaging tiles...';
+
+  setTimeout(function(){
+    var zip = new JSZip();
+    var folder = zip.folder('tiles');
+    var manifest = [];
+    var total = state.tiles.length, done = 0;
+
+    function processNext(i){
+      if(i >= total){ finishZip(); return; }
+      var t = state.tiles[i];
+      var rad = t.rot * Math.PI / 180;
+      var sw = t.canvas.width, sh = t.canvas.height;
+      var bw = Math.ceil(Math.abs(sw * Math.cos(rad)) + Math.abs(sh * Math.sin(rad)));
+      var bh = Math.ceil(Math.abs(sw * Math.sin(rad)) + Math.abs(sh * Math.cos(rad)));
+
+      var out = document.createElement('canvas');
+      out.width = Math.max(1, bw); out.height = Math.max(1, bh);
+      var octx = out.getContext('2d');
+      octx.translate(out.width / 2, out.height / 2);
+      octx.rotate(rad);
+      octx.drawImage(t.canvas, -sw / 2, -sh / 2);
+
+      var name = 'tile_r' + t.row + '_c' + t.col + '.png';
+      out.toBlob(function(blob){
+        folder.file(name, blob);
+        manifest.push({ file: name, row: t.row, col: t.col, x: Math.round(t.x), y: Math.round(t.y), width: Math.round(t.w), height: Math.round(t.h), rotationDeg: Math.round(t.rot * 10) / 10 });
+        done++;
+        progressLabel.textContent = 'Packaging tiles... ' + done + '/' + total;
+        processNext(i + 1);
+      }, 'image/png');
+    }
+
+    function finishZip(){
+      zip.file('layout.json', JSON.stringify({ sourceWidth: state.naturalW, sourceHeight: state.naturalH, tileCount: total, tiles: manifest }, null, 2));
+      progressLabel.textContent = 'Compressing...';
+      zip.generateAsync({ type: 'blob' }).then(function(blob){
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'tiles.zip';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+        progressLabel.textContent = 'Done - tiles.zip downloaded';
+        exportBtn.disabled = false;
+      });
+    }
+    processNext(0);
+  }, 30);
+}
+
+function rotatedCorners(x, y, w, h, rotDeg){
+  var rad = rotDeg * Math.PI / 180;
+  var cx = x + w / 2, cy = y + h / 2, hw = w / 2, hh = h / 2;
+  var pts = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+  return pts.map(function(p){
+    var rx = p[0] * Math.cos(rad) - p[1] * Math.sin(rad);
+    var ry = p[0] * Math.sin(rad) + p[1] * Math.cos(rad);
+    return { x: cx + rx, y: cy + ry };
+  });
+}
+function getCompositionBounds(){
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  state.tiles.forEach(function(t){
+    rotatedCorners(t.x, t.y, t.w, t.h, t.rot).forEach(function(p){
+      if(p.x < minX) minX = p.x;
+      if(p.y < minY) minY = p.y;
+      if(p.x > maxX) maxX = p.x;
+      if(p.y > maxY) maxY = p.y;
+    });
+  });
+  return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+}
+function exportCompositionPng(){
+  if(!state.img || !state.tiles.length) return;
+  exportPngBtn.disabled = true;
+  progressLabel.textContent = 'Flattening composition...';
+
+  setTimeout(function(){
+    var b = getCompositionBounds();
+    var w = Math.max(1, Math.ceil(b.maxX - b.minX));
+    var h = Math.max(1, Math.ceil(b.maxY - b.minY));
+    var out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    var ctx = out.getContext('2d');
+
+    var ordered = state.tiles.slice().sort(function(a, c){ return a.z - c.z; });
+    ordered.forEach(function(t){
+      var rad = t.rot * Math.PI / 180;
+      var cx = t.x + t.w / 2 - b.minX, cy = t.y + t.h / 2 - b.minY;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rad);
+      ctx.drawImage(t.canvas, -t.w / 2, -t.h / 2, t.w, t.h);
+      ctx.restore();
+    });
+
+    out.toBlob(function(blob){
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'composition.png';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+      progressLabel.textContent = 'Done - composition.png downloaded';
+      exportPngBtn.disabled = false;
+    }, 'image/png');
+  }, 30);
+}
+
+handleRatioChange();
+</script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<div>
+<h2 class="sr-only">An image to bitmap converter: upload an image, choose black-and-white or color mode, and download a real .bmp file.</h2>
+
+<div style="border: 0.5px dashed var(--border-strong); border-radius: var(--radius); padding: 2rem 1rem; text-align: center; cursor: pointer;" id="dropzone">
+  <i class="ti ti-upload" style="font-size: 24px; color: var(--text-muted);" aria-hidden="true"></i>
+  <p style="font-size: 14px; color: var(--text-secondary); margin: 8px 0 0;">Drop an image here, or click to choose one</p>
+  <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+</div>
+
+<div id="controls" style="display: none; margin-top: 1.5rem;">
+  <div style="display: flex; gap: 8px; margin-bottom: 1rem;">
+    <button id="modeColor" style="flex: 1;">Color bitmap</button>
+    <button id="modeMono" style="flex: 1;">Black and white</button>
+  </div>
+
+  <div id="monoControls" style="display: none;">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+      <label style="font-size: 14px; color: var(--text-secondary); width: 76px;">Threshold</label>
+      <input type="range" min="0" max="255" step="1" value="128" id="threshold" style="flex: 1;" />
+      <span style="font-size: 14px; font-weight: 500; min-width: 32px; text-align: right;" id="thresholdOut">128</span>
+    </div>
+    <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); margin-bottom: 1rem;">
+      <input type="checkbox" id="dither" checked style="width: 16px; height: 16px;" />
+      Use dithering
+    </label>
+  </div>
+
+  <div style="background: var(--surface-1); border-radius: var(--radius); padding: 12px; display: flex; justify-content: center;">
+    <canvas id="canvas" style="max-width: 100%; height: auto; image-rendering: pixelated;"></canvas>
+  </div>
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+    <span style="font-size: 13px; color: var(--text-muted);" id="dims"></span>
+    <button id="downloadBtn"><i class="ti ti-download" style="font-size: 16px; vertical-align: -3px; margin-right: 4px;" aria-hidden="true"></i>Download .bmp</button>
+  </div>
+
+  <div id="statusMsg" style="display: none; align-items: center; gap: 6px; justify-content: flex-end; margin-top: 8px; font-size: 13px; color: var(--text-success);">
+    <i class="ti ti-check" style="font-size: 16px;" aria-hidden="true"></i>
+    <span>Downloaded as converted.bmp</span>
+  </div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const controls = document.getElementById('controls');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const modeColorBtn = document.getElementById('modeColor');
+const modeMonoBtn = document.getElementById('modeMono');
+const monoControls = document.getElementById('monoControls');
+const thresholdInput = document.getElementById('threshold');
+const thresholdOut = document.getElementById('thresholdOut');
+const ditherInput = document.getElementById('dither');
+const dimsLabel = document.getElementById('dims');
+const downloadBtn = document.getElementById('downloadBtn');
+const statusMsg = document.getElementById('statusMsg');
+
+let sourceImage = null;
+let mode = 'color';
+let statusTimer = null;
+const MAX_DIM = 500;
+
+function setActiveMode(m) {
+  mode = m;
+  modeColorBtn.style.background = m === 'color' ? 'var(--surface-1)' : '';
+  modeColorBtn.style.borderColor = m === 'color' ? 'var(--border-strong)' : '';
+  modeMonoBtn.style.background = m === 'mono' ? 'var(--surface-1)' : '';
+  modeMonoBtn.style.borderColor = m === 'mono' ? 'var(--border-strong)' : '';
+  monoControls.style.display = m === 'mono' ? 'block' : 'none';
+  render();
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--border-stronger)'; });
+dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = ''; });
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.style.borderColor = '';
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+function loadFile(file) {
+  const img = new Image();
+  img.onload = () => {
+    sourceImage = img;
+    let w = img.width, h = img.height;
+    if (w > MAX_DIM || h > MAX_DIM) {
+      const scale = MAX_DIM / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+    canvas.width = w;
+    canvas.height = h;
+    controls.style.display = 'block';
+    statusMsg.style.display = 'none';
+    setActiveMode(mode);
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+thresholdInput.addEventListener('input', () => {
+  thresholdOut.textContent = thresholdInput.value;
+  render();
+});
+ditherInput.addEventListener('change', render);
+modeColorBtn.addEventListener('click', () => setActiveMode('color'));
+modeMonoBtn.addEventListener('click', () => setActiveMode('mono'));
+
+function render() {
+  if (!sourceImage) return;
+  ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+  dimsLabel.textContent = canvas.width + ' x ' + canvas.height + ' px';
+  if (mode === 'mono') {
+    applyMono();
+  }
+}
+
+function applyMono() {
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+  const threshold = parseInt(thresholdInput.value, 10);
+  const useDither = ditherInput.checked;
+  if (useDither) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const old = gray[i];
+        const val = old < threshold ? 0 : 255;
+        const err = old - val;
+        gray[i] = val;
+        if (x + 1 < w) gray[i + 1] += err * 7 / 16;
+        if (y + 1 < h) {
+          if (x > 0) gray[i + w - 1] += err * 3 / 16;
+          gray[i + w] += err * 5 / 16;
+          if (x + 1 < w) gray[i + w + 1] += err * 1 / 16;
+        }
+      }
+    }
+  } else {
+    for (let i = 0; i < w * h; i++) {
+      gray[i] = gray[i] < threshold ? 0 : 255;
+    }
+  }
+  for (let i = 0; i < w * h; i++) {
+    const v = gray[i] < 128 ? 0 : 255;
+    data[i * 4] = v;
+    data[i * 4 + 1] = v;
+    data[i * 4 + 2] = v;
+    data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function encodeBMP24(w, h, pixelData) {
+  const rowSize = Math.floor((24 * w + 31) / 32) * 4;
+  const pixelArraySize = rowSize * h;
+  const fileSize = 54 + pixelArraySize;
+  const buffer = new ArrayBuffer(fileSize);
+  const view = new DataView(buffer);
+  view.setUint8(0, 0x42); view.setUint8(1, 0x4D);
+  view.setUint32(2, fileSize, true);
+  view.setUint32(6, 0, true);
+  view.setUint32(10, 54, true);
+  view.setUint32(14, 40, true);
+  view.setInt32(18, w, true);
+  view.setInt32(22, h, true);
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 24, true);
+  view.setUint32(30, 0, true);
+  view.setUint32(34, pixelArraySize, true);
+  view.setInt32(38, 2835, true);
+  view.setInt32(42, 2835, true);
+  view.setUint32(46, 0, true);
+  view.setUint32(50, 0, true);
+  let offset = 54;
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      view.setUint8(offset++, pixelData[i + 2]);
+      view.setUint8(offset++, pixelData[i + 1]);
+      view.setUint8(offset++, pixelData[i]);
+    }
+    const rowBytesWritten = w * 3;
+    const pad = rowSize - rowBytesWritten;
+    for (let p = 0; p < pad; p++) view.setUint8(offset++, 0);
+  }
+  return buffer;
+}
+
+function encodeBMP1(w, h, pixelData) {
+  const rowSize = Math.floor((w + 31) / 32) * 4;
+  const pixelArraySize = rowSize * h;
+  const headerSize = 62;
+  const fileSize = headerSize + pixelArraySize;
+  const buffer = new ArrayBuffer(fileSize);
+  const view = new DataView(buffer);
+  view.setUint8(0, 0x42); view.setUint8(1, 0x4D);
+  view.setUint32(2, fileSize, true);
+  view.setUint32(6, 0, true);
+  view.setUint32(10, headerSize, true);
+  view.setUint32(14, 40, true);
+  view.setInt32(18, w, true);
+  view.setInt32(22, h, true);
+  view.setUint16(26, 1, true);
+  view.setUint16(28, 1, true);
+  view.setUint32(30, 0, true);
+  view.setUint32(34, pixelArraySize, true);
+  view.setInt32(38, 2835, true);
+  view.setInt32(42, 2835, true);
+  view.setUint32(46, 2, true);
+  view.setUint32(50, 2, true);
+  let offset = 54;
+  view.setUint8(offset++, 0); view.setUint8(offset++, 0); view.setUint8(offset++, 0); view.setUint8(offset++, 0);
+  view.setUint8(offset++, 255); view.setUint8(offset++, 255); view.setUint8(offset++, 255); view.setUint8(offset++, 0);
+  for (let y = h - 1; y >= 0; y--) {
+    let bitBuf = 0, bitCount = 0;
+    const rowStart = offset;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const isWhite = pixelData[i] >= 128 ? 1 : 0;
+      bitBuf = (bitBuf << 1) | isWhite;
+      bitCount++;
+      if (bitCount === 8) {
+        view.setUint8(offset++, bitBuf);
+        bitBuf = 0; bitCount = 0;
+      }
+    }
+    if (bitCount > 0) {
+      bitBuf = bitBuf << (8 - bitCount);
+      view.setUint8(offset++, bitBuf);
+    }
+    const written = offset - rowStart;
+    for (let p = 0; p < rowSize - written; p++) view.setUint8(offset++, 0);
+  }
+  return buffer;
+}
+
+downloadBtn.addEventListener('click', () => {
+  if (!sourceImage) return;
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h).data;
+  const buffer = mode === 'mono' ? encodeBMP1(w, h, imgData) : encodeBMP24(w, h, imgData);
+  const blob = new Blob([buffer], { type: 'image/bmp' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'converted.bmp';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  statusMsg.style.display = 'flex';
+  if (statusTimer) clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { statusMsg.style.display = 'none'; }, 4000);
+});
+</script>
+</div>

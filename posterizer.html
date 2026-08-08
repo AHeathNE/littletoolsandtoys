@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Posterize</title>
+</head>
+<body>
+
+<h1>Posterize</h1>
+
+<p>
+  <input type="file" id="fileInput" accept="image/*">
+</p>
+
+<p>
+  Levels per channel: <input type="range" id="levelsSlider" min="2" max="8" value="4">
+  <span id="levelsVal">4</span>
+  <button id="applyBtn">Posterize</button>
+</p>
+
+<p>
+  <canvas id="canvas"></canvas>
+</p>
+
+<div id="paletteWrap" style="display:none;">
+  <p>Click a swatch to change that color:</p>
+  <div id="swatches"></div>
+  <p>
+    <button id="shuffleBtn">Shuffle Colors</button>
+    <button id="resetBtn">Reset Colors</button>
+  </p>
+</div>
+
+<p>
+  <button id="downloadBtn" style="display:none;">Download PNG</button>
+</p>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const levelsSlider = document.getElementById('levelsSlider');
+const levelsVal = document.getElementById('levelsVal');
+const applyBtn = document.getElementById('applyBtn');
+const paletteWrap = document.getElementById('paletteWrap');
+const swatchesEl = document.getElementById('swatches');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const resetBtn = document.getElementById('resetBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+
+let sourceImg = null;
+let basePosterized = null; // ImageData with original posterized colors, never mutated
+let currentPalette = [];   // array of {key:"r,g,b", r,g,b}
+let colorMap = {};         // key -> [r,g,b] current display color
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      sourceImg = img;
+      const maxDim = 900;
+      let w = img.width, h = img.height;
+      if(w > maxDim || h > maxDim){
+        const scale = maxDim / Math.max(w,h);
+        w = Math.round(w*scale);
+        h = Math.round(h*scale);
+      }
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      paletteWrap.style.display = 'none';
+      downloadBtn.style.display = 'none';
+      basePosterized = null;
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+levelsSlider.addEventListener('input', () => {
+  levelsVal.textContent = levelsSlider.value;
+});
+
+function posterizeChannel(value, levels){
+  const step = 255 / (levels - 1);
+  return Math.round(Math.round(value / step) * step);
+}
+
+function applyPosterize(){
+  if(!sourceImg) return;
+  const levels = parseInt(levelsSlider.value, 10);
+  const w = canvas.width, h = canvas.height;
+  ctx.drawImage(sourceImg, 0, 0, w, h);
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  for(let i = 0; i < data.length; i += 4){
+    data[i]   = posterizeChannel(data[i], levels);
+    data[i+1] = posterizeChannel(data[i+1], levels);
+    data[i+2] = posterizeChannel(data[i+2], levels);
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  basePosterized = imgData;
+  buildPalette(imgData);
+  downloadBtn.style.display = 'inline-block';
+}
+
+function buildPalette(imgData){
+  const data = imgData.data;
+  const counts = {};
+  for(let i = 0; i < data.length; i += 4){
+    const key = data[i] + ',' + data[i+1] + ',' + data[i+2];
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  const sorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
+  const top = sorted.slice(0, 12);
+
+  currentPalette = top.map(key => {
+    const [r,g,b] = key.split(',').map(Number);
+    return { key, r, g, b };
+  });
+
+  colorMap = {};
+  currentPalette.forEach(c => { colorMap[c.key] = [c.r, c.g, c.b]; });
+
+  renderSwatches();
+  paletteWrap.style.display = 'block';
+}
+
+function rgbToHex(r,g,b){
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+function hexToRgb(hex){
+  const n = parseInt(hex.slice(1), 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+
+function renderSwatches(){
+  swatchesEl.innerHTML = '';
+  currentPalette.forEach((c) => {
+    const input = document.createElement('input');
+    input.type = 'color';
+    const cur = colorMap[c.key];
+    input.value = rgbToHex(cur[0], cur[1], cur[2]);
+
+    input.addEventListener('input', () => {
+      colorMap[c.key] = hexToRgb(input.value);
+      redrawFromMap();
+    });
+
+    swatchesEl.appendChild(input);
+  });
+}
+
+function redrawFromMap(){
+  if(!basePosterized) return;
+  const w = canvas.width, h = canvas.height;
+  const src = basePosterized.data;
+  const out = ctx.createImageData(w, h);
+  const dst = out.data;
+
+  for(let i = 0; i < src.length; i += 4){
+    const key = src[i] + ',' + src[i+1] + ',' + src[i+2];
+    const mapped = colorMap[key];
+    if(mapped){
+      dst[i] = mapped[0];
+      dst[i+1] = mapped[1];
+      dst[i+2] = mapped[2];
+    } else {
+      dst[i] = src[i];
+      dst[i+1] = src[i+1];
+      dst[i+2] = src[i+2];
+    }
+    dst[i+3] = src[i+3];
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i+1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+shuffleBtn.addEventListener('click', () => {
+  if(currentPalette.length < 2) return;
+  const values = currentPalette.map(c => colorMap[c.key]);
+  const shuffled = shuffleArray(values);
+  currentPalette.forEach((c, idx) => { colorMap[c.key] = shuffled[idx]; });
+  renderSwatches();
+  redrawFromMap();
+});
+
+resetBtn.addEventListener('click', () => {
+  currentPalette.forEach(c => { colorMap[c.key] = [c.r, c.g, c.b]; });
+  renderSwatches();
+  redrawFromMap();
+});
+
+applyBtn.addEventListener('click', applyPosterize);
+
+downloadBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'posterized.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+</script>
+
+</body>
+</html>

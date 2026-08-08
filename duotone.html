@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Duotone Image Tool</title>
+<style>
+  :root {
+    --bg: #16161a;
+    --panel: #1f1f24;
+    --border: #2e2e35;
+    --text: #f2f2f0;
+    --muted: #9a9aa2;
+    --accent: #e8e6df;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 20px;
+  }
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  p.sub {
+    color: var(--muted);
+    margin: 0 0 28px;
+    font-size: 0.92rem;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 20px;
+  }
+  .row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color 0.15s, color 0.15s;
+    flex: 1;
+    min-width: 220px;
+  }
+  .drop:hover, .drop.drag {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  input[type=file] { display: none; }
+  .colors {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .color-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .color-field label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    min-width: 70px;
+  }
+  input[type=color] {
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 1px solid var(--border); border-radius: 8px; }
+  .hex {
+    background: #131316;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+    width: 90px;
+    font-family: monospace;
+  }
+  .swap {
+    background: #131316;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  .swap:hover { border-color: var(--accent); }
+  .slider-field {
+    margin-top: 18px;
+  }
+  .slider-field label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .presets {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  .preset-btn {
+    border: 1px solid var(--border);
+    background: #131316;
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .preset-btn:hover { border-color: var(--accent); }
+  .preset-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 4px 0 0 -1px var(--sw2, #000);
+  }
+  canvas {
+    max-width: 100%;
+    border-radius: 10px;
+    display: block;
+    margin: 0 auto;
+  }
+  .preview-wrap {
+    text-align: center;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  button.primary {
+    background: var(--accent);
+    color: #16161a;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  button.primary:hover:not(:disabled) { opacity: 0.9; }
+  .filename {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Duotone Image Tool</h1>
+  <p class="sub">Upload an image, pick your two colors, download the result.</p>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      <div id="dropText">Click to upload or drag an image here</div>
+      <div class="filename" id="filename"></div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <div class="colors" style="margin-top:22px;">
+      <div class="color-field">
+        <label>Shadows</label>
+        <input type="color" id="color1" value="#1a1a2e">
+        <input type="text" class="hex" id="hex1" value="#1a1a2e">
+      </div>
+      <button class="swap" id="swapBtn" title="Swap colors">⇄</button>
+      <div class="color-field">
+        <label>Highlights</label>
+        <input type="color" id="color2" value="#f4a261">
+        <input type="text" class="hex" id="hex2" value="#f4a261">
+      </div>
+    </div>
+
+    <div class="presets" id="presets"></div>
+
+    <div class="slider-field">
+      <label><span>Midpoint balance</span><span id="midVal">50%</span></label>
+      <input type="range" id="midSlider" min="0" max="100" value="50">
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="preview-wrap" id="previewWrap">No image loaded yet</div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="downloadBtn" disabled>Download PNG</button>
+  </div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const drop = document.getElementById('drop');
+const dropText = document.getElementById('dropText');
+const filenameEl = document.getElementById('filename');
+const previewWrap = document.getElementById('previewWrap');
+const downloadBtn = document.getElementById('downloadBtn');
+const color1 = document.getElementById('color1');
+const color2 = document.getElementById('color2');
+const hex1 = document.getElementById('hex1');
+const hex2 = document.getElementById('hex2');
+const swapBtn = document.getElementById('swapBtn');
+const midSlider = document.getElementById('midSlider');
+const midVal = document.getElementById('midVal');
+const presetsEl = document.getElementById('presets');
+
+let sourceImage = null;
+let canvas = null;
+let ctx = null;
+let rawImageData = null; // grayscale luminance cache, per loaded image
+
+const presets = [
+  ['#1a1a2e', '#f4a261', 'Midnight Amber'],
+  ['#03071e', '#ffba08', 'Noir Gold'],
+  ['#22223b', '#f2e9e4', 'Slate Cream'],
+  ['#0b132b', '#5bc0be', 'Deep Teal'],
+  ['#3d0000', '#ffd6a5', 'Wine Peach'],
+  ['#001219', '#94d2bd', 'Ocean Mint'],
+  ['#2b2d42', '#ef233c', 'Ink Crimson'],
+];
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
+}
+
+function isValidHex(hex) {
+  return /^#[0-9A-Fa-f]{6}$/.test(hex);
+}
+
+presets.forEach(([c1, c2, name]) => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn';
+  btn.title = name;
+  btn.innerHTML = `<span class="preset-swatch" style="background:${c1}; --sw2:${c2}"></span>${name}`;
+  btn.addEventListener('click', () => {
+    color1.value = c1; hex1.value = c1;
+    color2.value = c2; hex2.value = c2;
+    render();
+  });
+  presetsEl.appendChild(btn);
+});
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  drop.classList.remove('drag');
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    loadFile(e.dataTransfer.files[0]);
+  }
+});
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+function loadFile(file) {
+  if (!file.type.startsWith('image/')) return;
+  filenameEl.textContent = file.name;
+  dropText.textContent = 'Click to upload or drag a different image';
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      sourceImage = img;
+      setupCanvas();
+      render();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function setupCanvas() {
+  previewWrap.innerHTML = '';
+  canvas = document.createElement('canvas');
+  const maxDim = 1400;
+  let w = sourceImage.width;
+  let h = sourceImage.height;
+  if (w > maxDim || h > maxDim) {
+    const scale = maxDim / Math.max(w, h);
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+  }
+  canvas.width = w;
+  canvas.height = h;
+  previewWrap.appendChild(canvas);
+  ctx = canvas.getContext('2d');
+  ctx.drawImage(sourceImage, 0, 0, w, h);
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    gray[i / 4] = lum / 255;
+  }
+  rawImageData = { w, h, gray };
+  downloadBtn.disabled = false;
+}
+
+function render() {
+  if (!rawImageData || !ctx) return;
+  const { w, h, gray } = rawImageData;
+  const c1 = hexToRgb(color1.value);
+  const c2 = hexToRgb(color2.value);
+  const mid = midSlider.value / 100;
+
+  const out = ctx.createImageData(w, h);
+  const od = out.data;
+
+  for (let i = 0; i < gray.length; i++) {
+    let t = gray[i];
+    // remap around midpoint so slider shifts balance of tones
+    if (mid !== 0.5) {
+      if (t < mid) {
+        t = (t / mid) * 0.5;
+      } else {
+        t = 0.5 + ((t - mid) / (1 - mid)) * 0.5;
+      }
+    }
+    const r = c1.r + (c2.r - c1.r) * t;
+    const g = c1.g + (c2.g - c1.g) * t;
+    const b = c1.b + (c2.b - c1.b) * t;
+    const idx = i * 4;
+    od[idx] = r;
+    od[idx + 1] = g;
+    od[idx + 2] = b;
+    od[idx + 3] = 255;
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+color1.addEventListener('input', () => { hex1.value = color1.value; render(); });
+color2.addEventListener('input', () => { hex2.value = color2.value; render(); });
+hex1.addEventListener('change', () => { if (isValidHex(hex1.value)) { color1.value = hex1.value; render(); } });
+hex2.addEventListener('change', () => { if (isValidHex(hex2.value)) { color2.value = hex2.value; render(); } });
+swapBtn.addEventListener('click', () => {
+  const tmp = color1.value;
+  color1.value = color2.value;
+  color2.value = tmp;
+  hex1.value = color1.value;
+  hex2.value = color2.value;
+  render();
+});
+midSlider.addEventListener('input', () => {
+  midVal.textContent = midSlider.value + '%';
+  render();
+});
+
+downloadBtn.addEventListener('click', () => {
+  if (!canvas) return;
+  const link = document.createElement('a');
+  link.download = 'duotone.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Image Cropper</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; }
+  #controls { margin-bottom: 10px; }
+  #controls button { margin-right: 5px; }
+  #canvasWrap { position: relative; display: inline-block; }
+  #cropbox {
+    position: absolute;
+    outline: 2px solid #2196f3;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+    cursor: move;
+  }
+  .handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #2196f3;
+    border: 1px solid white;
+  }
+  .handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+  .handle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+  .handle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+  .handle.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+</style>
+</head>
+<body>
+
+<input type="file" id="fileInput" accept="image/*">
+
+<div id="controls">
+  Ratio:
+  <button data-ratio="free">Free</button>
+  <button data-ratio="1:1">1:1</button>
+  <button data-ratio="4:3">4:3</button>
+  <button data-ratio="16:9">16:9</button>
+  <input type="number" id="ratioW" placeholder="W" style="width:40px">
+  :
+  <input type="number" id="ratioH" placeholder="H" style="width:40px">
+  <button id="applyCustom">Set</button>
+  <button id="downloadBtn">Download crop</button>
+  <span id="dims"></span>
+</div>
+
+<div id="canvasWrap">
+  <canvas id="imgCanvas"></canvas>
+  <div id="cropbox">
+    <div class="handle nw" data-handle="nw"></div>
+    <div class="handle ne" data-handle="ne"></div>
+    <div class="handle sw" data-handle="sw"></div>
+    <div class="handle se" data-handle="se"></div>
+  </div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const canvas = document.getElementById('imgCanvas');
+const ctx = canvas.getContext('2d');
+const cropbox = document.getElementById('cropbox');
+const dimsEl = document.getElementById('dims');
+
+let img = new Image();
+let scale = 1;
+let dispW = 0, dispH = 0;
+let ratio = null; // {w,h} or null
+let box = { x: 0, y: 0, w: 0, h: 0 };
+
+const MAX_W = 700, MAX_H = 550, MIN_SIZE = 20;
+
+// ---- load image ----
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    img = new Image();
+    img.onload = setupCanvas;
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+function setupCanvas() {
+  scale = Math.min(MAX_W / img.naturalWidth, MAX_H / img.naturalHeight, 1);
+  dispW = Math.round(img.naturalWidth * scale);
+  dispH = Math.round(img.naturalHeight * scale);
+  canvas.width = dispW;
+  canvas.height = dispH;
+  ctx.drawImage(img, 0, 0, dispW, dispH);
+
+  const w = dispW * 0.8, h = dispH * 0.8;
+  box = { x: (dispW - w) / 2, y: (dispH - h) / 2, w, h };
+  clampBox();
+  renderBox();
+}
+
+// ---- ratio buttons ----
+document.querySelectorAll('#controls button[data-ratio]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const val = btn.dataset.ratio;
+    ratio = val === 'free' ? null : (() => {
+      const [w, h] = val.split(':').map(Number);
+      return { w, h };
+    })();
+    if (ratio && dispW) fitRatio();
+  });
+});
+
+document.getElementById('applyCustom').addEventListener('click', () => {
+  const w = parseFloat(document.getElementById('ratioW').value);
+  const h = parseFloat(document.getElementById('ratioH').value);
+  if (w > 0 && h > 0) {
+    ratio = { w, h };
+    if (dispW) fitRatio();
+  }
+});
+
+function fitRatio() {
+  const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+  const target = ratio.w / ratio.h;
+  let w = box.w, h = w / target;
+  if (h > dispH) { h = dispH; w = h * target; }
+  if (w > dispW) { w = dispW; h = w / target; }
+  box.w = w; box.h = h;
+  box.x = cx - w / 2; box.y = cy - h / 2;
+  clampBox();
+  renderBox();
+}
+
+function clampBox() {
+  box.w = Math.max(MIN_SIZE, Math.min(box.w, dispW));
+  box.h = Math.max(MIN_SIZE, Math.min(box.h, dispH));
+  box.x = Math.max(0, Math.min(box.x, dispW - box.w));
+  box.y = Math.max(0, Math.min(box.y, dispH - box.h));
+}
+
+function renderBox() {
+  cropbox.style.left = box.x + 'px';
+  cropbox.style.top = box.y + 'px';
+  cropbox.style.width = box.w + 'px';
+  cropbox.style.height = box.h + 'px';
+  dimsEl.textContent = Math.round(box.w / scale) + ' x ' + Math.round(box.h / scale) + ' px';
+}
+
+// ---- dragging (move + resize) ----
+let mode = null, start = null, boxStart = null;
+
+function beginDrag(m, e) {
+  mode = m;
+  start = { x: e.clientX, y: e.clientY };
+  boxStart = Object.assign({}, box);
+  e.preventDefault();
+  e.stopPropagation();
+  window.addEventListener('pointermove', onDrag);
+  window.addEventListener('pointerup', endDrag);
+}
+
+cropbox.addEventListener('pointerdown', e => {
+  if (e.target === cropbox) beginDrag('move', e);
+});
+cropbox.querySelectorAll('.handle').forEach(h => {
+  h.addEventListener('pointerdown', e => beginDrag(h.dataset.handle, e));
+});
+
+function onDrag(e) {
+  if (!mode) return;
+  const dx = e.clientX - start.x, dy = e.clientY - start.y;
+
+  if (mode === 'move') {
+    box.x = boxStart.x + dx;
+    box.y = boxStart.y + dy;
+  } else {
+    let { x, y, w, h } = boxStart;
+    let left = x, top = y, right = x + w, bottom = y + h;
+    if (mode.includes('n')) top = y + dy;
+    if (mode.includes('s')) bottom = y + h + dy;
+    if (mode.includes('w')) left = x + dx;
+    if (mode.includes('e')) right = x + w + dx;
+
+    let newW = right - left, newH = bottom - top;
+    if (ratio) {
+      const target = ratio.w / ratio.h;
+      if (Math.abs(dx) > Math.abs(dy)) newH = newW / target; else newW = newH * target;
+      if (mode === 'nw') { left = right - newW; top = bottom - newH; }
+      if (mode === 'ne') { right = left + newW; top = bottom - newH; }
+      if (mode === 'sw') { left = right - newW; bottom = top + newH; }
+      if (mode === 'se') { right = left + newW; bottom = top + newH; }
+    }
+    box.x = left; box.y = top;
+    box.w = Math.max(MIN_SIZE, right - left);
+    box.h = Math.max(MIN_SIZE, bottom - top);
+  }
+  clampBox();
+  renderBox();
+}
+
+function endDrag() {
+  mode = null;
+  window.removeEventListener('pointermove', onDrag);
+  window.removeEventListener('pointerup', endDrag);
+}
+
+// ---- download ----
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if (!dispW) return;
+  const sx = box.x / scale, sy = box.y / scale, sw = box.w / scale, sh = box.h / scale;
+  const out = document.createElement('canvas');
+  out.width = Math.round(sw);
+  out.height = Math.round(sh);
+  out.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  out.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cropped-image.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+});
+</script>
+</body>
+</html>

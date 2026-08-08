@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Pixel Shift</title>
+</head>
+<body>
+
+<h2>Pixel Shift</h2>
+
+<form>
+  <input type="file" id="fileInput" accept="image/*"><br><br>
+
+  <input type="radio" name="axis" value="row" id="axisRow" checked>
+  <label for="axisRow">Shift rows</label>
+  <input type="radio" name="axis" value="col" id="axisCol">
+  <label for="axisCol">Shift columns</label>
+  <br><br>
+
+  <label for="bandSize">Pixels per band:</label>
+  <input type="number" id="bandSize" value="10" min="1"><br><br>
+
+  <label for="shiftAmt">Max shift (px):</label>
+  <input type="number" id="shiftAmt" value="40" min="0"><br><br>
+
+  <input type="checkbox" id="randomize" checked>
+  <label for="randomize">Randomize per band</label><br>
+
+  <input type="checkbox" id="wrap" checked>
+  <label for="wrap">Wrap edges</label><br><br>
+
+  <button type="button" onclick="applyShift()">Shift</button>
+  <button type="button" onclick="resetImage()">Reset</button>
+  <button type="button" onclick="download()">Download PNG</button>
+</form>
+
+<br>
+<canvas id="canvas"></canvas>
+
+<script>
+let original = null;
+let current = null;
+
+document.getElementById('fileInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const img = new Image();
+  img.onload = function(){
+    const canvas = document.getElementById('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    original = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+function applyShift(){
+  if(!current) return;
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const src = current.data;
+  const out = ctx.createImageData(w, h);
+  const dst = out.data;
+
+  const axis = document.querySelector('input[name="axis"]:checked').value;
+  const band = Math.max(1, parseInt(document.getElementById('bandSize').value) || 1);
+  const maxShift = parseInt(document.getElementById('shiftAmt').value) || 0;
+  const randomize = document.getElementById('randomize').checked;
+  const wrap = document.getElementById('wrap').checked;
+
+  function offsetForBand(i){
+    if(maxShift === 0) return 0;
+    if(!randomize) return maxShift;
+    return Math.floor(Math.random() * (maxShift * 2 + 1)) - maxShift;
+  }
+
+  if(axis === 'row'){
+    let offset = 0;
+    for(let y = 0; y < h; y++){
+      if(y % band === 0) offset = offsetForBand(y / band);
+      for(let x = 0; x < w; x++){
+        let sx = x - offset;
+        if(wrap){
+          sx = ((sx % w) + w) % w;
+        }
+        const di = (y * w + x) * 4;
+        if(sx < 0 || sx >= w){
+          dst[di] = 0; dst[di+1] = 0; dst[di+2] = 0; dst[di+3] = 255;
+        } else {
+          const si = (y * w + sx) * 4;
+          dst[di] = src[si]; dst[di+1] = src[si+1]; dst[di+2] = src[si+2]; dst[di+3] = src[si+3];
+        }
+      }
+    }
+  } else {
+    let offset = 0;
+    for(let x = 0; x < w; x++){
+      if(x % band === 0) offset = offsetForBand(x / band);
+      for(let y = 0; y < h; y++){
+        let sy = y - offset;
+        if(wrap){
+          sy = ((sy % h) + h) % h;
+        }
+        const di = (y * w + x) * 4;
+        if(sy < 0 || sy >= h){
+          dst[di] = 0; dst[di+1] = 0; dst[di+2] = 0; dst[di+3] = 255;
+        } else {
+          const si = (sy * w + x) * 4;
+          dst[di] = src[si]; dst[di+1] = src[si+1]; dst[di+2] = src[si+2]; dst[di+3] = src[si+3];
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(out, 0, 0);
+  current = out;
+}
+
+function resetImage(){
+  if(!original) return;
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  current = new ImageData(new Uint8ClampedArray(original.data), original.width, original.height);
+  ctx.putImageData(current, 0, 0);
+}
+
+function download(){
+  const canvas = document.getElementById('canvas');
+  const link = document.createElement('a');
+  link.download = 'pixel-shift.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+</script>
+
+</body>
+</html>

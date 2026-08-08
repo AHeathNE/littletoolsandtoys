@@ -1,0 +1,190 @@
+<div>
+<h2 class="sr-only">A JPEG compressor: upload an image, choose a quality level and resize percentage, and see the original and compressed versions side by side before downloading.</h2>
+
+<div style="border: 0.5px dashed var(--border-strong); border-radius: var(--radius); padding: 2rem 1rem; text-align: center; cursor: pointer;" id="dropzone">
+  <i class="ti ti-upload" style="font-size: 24px; color: var(--text-muted);" aria-hidden="true"></i>
+  <p style="font-size: 14px; color: var(--text-secondary); margin: 8px 0 0;">Drop an image here, or click to choose one</p>
+  <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+</div>
+
+<div id="controls" style="display: none; margin-top: 1.5rem;">
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+    <label style="font-size: 14px; color: var(--text-secondary); width: 76px;">Quality</label>
+    <input type="range" min="1" max="100" step="1" value="20" id="quality" style="flex: 1;" />
+    <span style="font-size: 14px; font-weight: 500; min-width: 40px; text-align: right;" id="qualityOut">20%</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 1rem;">
+    <label style="font-size: 14px; color: var(--text-secondary); width: 76px;">Scale</label>
+    <input type="range" min="10" max="100" step="5" value="100" id="scale" style="flex: 1;" />
+    <span style="font-size: 14px; font-weight: 500; min-width: 40px; text-align: right;" id="scaleOut">100%</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+    <div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 6px;">Original</p>
+      <div style="background: var(--surface-1); border-radius: var(--radius); padding: 8px; display: flex; justify-content: center;">
+        <canvas id="canvasOriginal" style="max-width: 100%; height: auto;"></canvas>
+      </div>
+      <p style="font-size: 16px; font-weight: 500; margin: 8px 0 0;" id="originalSize">—</p>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 0;" id="originalDims"></p>
+    </div>
+    <div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 6px;">Compressed</p>
+      <div style="background: var(--surface-1); border-radius: var(--radius); padding: 8px; display: flex; justify-content: center;">
+        <canvas id="canvasCompressed" style="max-width: 100%; height: auto;"></canvas>
+      </div>
+      <p style="font-size: 16px; font-weight: 500; margin: 8px 0 0;" id="compressedSize">—</p>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 0;" id="compressedDims"></p>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 1rem;">
+    <button id="downloadBtn"><i class="ti ti-download" style="font-size: 16px; vertical-align: -3px; margin-right: 4px;" aria-hidden="true"></i>Download .jpg</button>
+  </div>
+
+  <div id="statusMsg" style="display: none; align-items: center; gap: 6px; justify-content: flex-end; margin-top: 8px; font-size: 13px; color: var(--text-success);">
+    <i class="ti ti-check" style="font-size: 16px;" aria-hidden="true"></i>
+    <span>Downloaded as compressed.jpg</span>
+  </div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const controls = document.getElementById('controls');
+const canvasOriginal = document.getElementById('canvasOriginal');
+const ctxOriginal = canvasOriginal.getContext('2d');
+const canvasCompressed = document.getElementById('canvasCompressed');
+const ctxCompressed = canvasCompressed.getContext('2d');
+const qualityInput = document.getElementById('quality');
+const qualityOut = document.getElementById('qualityOut');
+const scaleInput = document.getElementById('scale');
+const scaleOut = document.getElementById('scaleOut');
+const originalSizeLabel = document.getElementById('originalSize');
+const originalDimsLabel = document.getElementById('originalDims');
+const compressedSizeLabel = document.getElementById('compressedSize');
+const compressedDimsLabel = document.getElementById('compressedDims');
+const downloadBtn = document.getElementById('downloadBtn');
+const statusMsg = document.getElementById('statusMsg');
+
+let sourceImage = null;
+let originalBytes = 0;
+let statusTimer = null;
+let debounceTimer = null;
+const PREVIEW_MAX_DIM = 420;
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--border-stronger)'; });
+dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = ''; });
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.style.borderColor = '';
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+function loadFile(file) {
+  originalBytes = file.size;
+  const img = new Image();
+  img.onload = () => {
+    sourceImage = img;
+    let w = img.width, h = img.height;
+    let pw = w, ph = h;
+    if (pw > PREVIEW_MAX_DIM || ph > PREVIEW_MAX_DIM) {
+      const scale = PREVIEW_MAX_DIM / Math.max(pw, ph);
+      pw = Math.round(pw * scale);
+      ph = Math.round(ph * scale);
+    }
+    canvasOriginal.width = pw;
+    canvasOriginal.height = ph;
+    ctxOriginal.drawImage(img, 0, 0, pw, ph);
+    controls.style.display = 'block';
+    statusMsg.style.display = 'none';
+    originalSizeLabel.textContent = formatBytes(originalBytes);
+    originalDimsLabel.textContent = w + ' x ' + h + ' px';
+    render();
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+qualityInput.addEventListener('input', () => {
+  qualityOut.textContent = qualityInput.value + '%';
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(render, 80);
+});
+scaleInput.addEventListener('input', () => {
+  scaleOut.textContent = scaleInput.value + '%';
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(render, 80);
+});
+
+function getOutputDims() {
+  const scalePct = parseInt(scaleInput.value, 10) / 100;
+  const w = Math.max(1, Math.round(sourceImage.width * scalePct));
+  const h = Math.max(1, Math.round(sourceImage.height * scalePct));
+  return { w, h };
+}
+
+function render() {
+  if (!sourceImage) return;
+  const { w, h } = getOutputDims();
+  const q = parseInt(qualityInput.value, 10) / 100;
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = w;
+  outCanvas.height = h;
+  outCanvas.getContext('2d').drawImage(sourceImage, 0, 0, w, h);
+
+  outCanvas.toBlob(blob => {
+    compressedSizeLabel.textContent = formatBytes(blob.size);
+    compressedDimsLabel.textContent = w + ' x ' + h + ' px';
+    const img2 = new Image();
+    img2.onload = () => {
+      let dw = w, dh = h;
+      if (dw > PREVIEW_MAX_DIM || dh > PREVIEW_MAX_DIM) {
+        const s = PREVIEW_MAX_DIM / Math.max(dw, dh);
+        dw = Math.round(dw * s);
+        dh = Math.round(dh * s);
+      }
+      canvasCompressed.width = dw;
+      canvasCompressed.height = dh;
+      ctxCompressed.clearRect(0, 0, dw, dh);
+      ctxCompressed.drawImage(img2, 0, 0, dw, dh);
+    };
+    img2.src = URL.createObjectURL(blob);
+  }, 'image/jpeg', q);
+}
+
+downloadBtn.addEventListener('click', () => {
+  if (!sourceImage) return;
+  const { w, h } = getOutputDims();
+  const q = parseInt(qualityInput.value, 10) / 100;
+  const fullCanvas = document.createElement('canvas');
+  fullCanvas.width = w;
+  fullCanvas.height = h;
+  fullCanvas.getContext('2d').drawImage(sourceImage, 0, 0, w, h);
+  fullCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'compressed.jpg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    statusMsg.style.display = 'flex';
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => { statusMsg.style.display = 'none'; }, 4000);
+  }, 'image/jpeg', q);
+});
+</script>
+</div>

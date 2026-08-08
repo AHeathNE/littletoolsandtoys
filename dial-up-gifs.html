@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dial-Up GIF Maker</title>
+<style>
+  body { font-family: sans-serif; max-width: 640px; margin: 20px auto; padding: 0 12px; }
+  fieldset { margin-bottom: 12px; }
+  label { display: inline-block; min-width: 130px; }
+  canvas { display: block; width: 100%; height: auto; border: 1px solid #999; background: #fff; }
+  img { max-width: 100%; display: block; margin-top: 8px; border: 1px solid #999; }
+</style>
+</head>
+<body>
+
+<h1>Dial-Up GIF Maker</h1>
+<p>Upload an image and turn it into an animated GIF that looks like it's loading over a dial-up connection.</p>
+
+<fieldset>
+  <legend>1. Choose a picture</legend>
+  <input type="file" id="fileInput" accept="image/*">
+  <p id="fileNameLabel"></p>
+</fieldset>
+
+<fieldset>
+  <legend>2. Settings</legend>
+
+  <p>
+    <label for="style">Loading style</label>
+    <select id="style">
+      <option value="scanline">Top-to-bottom reveal</option>
+      <option value="interlace">Interlaced GIF (blocky)</option>
+      <option value="blur">Progressive JPEG (blurry&rarr;sharp)</option>
+    </select>
+  </p>
+
+  <p>
+    <label for="widthRange">Output width</label>
+    <input type="range" id="widthRange" min="160" max="480" step="8" value="320">
+    <span id="widthVal">320px</span>
+  </p>
+
+  <p>
+    <label for="stepsRange">Loading steps</label>
+    <input type="range" id="stepsRange" min="8" max="48" step="1" value="22">
+    <span id="stepsVal">22</span>
+  </p>
+
+  <p>
+    <label for="speedRange">Frame delay</label>
+    <input type="range" id="speedRange" min="20" max="220" step="10" value="90">
+    <span id="speedVal">90ms/frame</span>
+  </p>
+
+  <p>
+    <label for="cutoffRange">Stop loading at</label>
+    <input type="range" id="cutoffRange" min="10" max="100" step="5" value="100">
+    <span id="cutoffVal">100%</span>
+  </p>
+
+  <p>
+    <label for="loopCheck">Loop animation</label>
+    <input type="checkbox" id="loopCheck" checked>
+  </p>
+</fieldset>
+
+<fieldset>
+  <legend>3. Preview</legend>
+  <canvas id="preview" width="320" height="200"></canvas>
+  <p>
+    <button id="playPauseBtn" disabled>Pause</button>
+    <span id="statusText">No image loaded</span>
+    &mdash; <span id="pctText">0%</span>
+  </p>
+</fieldset>
+
+<fieldset>
+  <legend>4. Export</legend>
+  <button id="generateGifBtn" disabled>Generate GIF</button>
+  <p id="genHint"></p>
+  <div id="outputArea"></div>
+</fieldset>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<script>
+(function(){
+  const fileNameLabel = document.getElementById('fileNameLabel');
+  const fileInput = document.getElementById('fileInput');
+  const previewCanvas = document.getElementById('preview');
+  const pctx = previewCanvas.getContext('2d');
+  const styleSel = document.getElementById('style');
+  const widthRange = document.getElementById('widthRange');
+  const widthVal = document.getElementById('widthVal');
+  const stepsRange = document.getElementById('stepsRange');
+  const stepsVal = document.getElementById('stepsVal');
+  const speedRange = document.getElementById('speedRange');
+  const speedVal = document.getElementById('speedVal');
+  const cutoffRange = document.getElementById('cutoffRange');
+  const cutoffVal = document.getElementById('cutoffVal');
+  const loopCheck = document.getElementById('loopCheck');
+  const generateGifBtn = document.getElementById('generateGifBtn');
+  const genHint = document.getElementById('genHint');
+  const outputArea = document.getElementById('outputArea');
+  const statusText = document.getElementById('statusText');
+  const pctText = document.getElementById('pctText');
+  const playPauseBtn = document.getElementById('playPauseBtn');
+
+  let img = null;
+  let fileBaseName = 'image';
+  let frames = [];        // offscreen canvases, one per step (trimmed to cutoff, held frames appended)
+  let outW = 320, outH = 200;
+  let playTimer = null;
+  let playIndex = 0;
+  let isPaused = false;
+
+  function setStatus(text){ statusText.textContent = text; }
+
+  widthRange.addEventListener('input', ()=>{ widthVal.textContent = widthRange.value+'px'; if(img) rebuild(); });
+  stepsRange.addEventListener('input', ()=>{ stepsVal.textContent = stepsRange.value; if(img) rebuild(); });
+  speedRange.addEventListener('input', ()=>{ speedVal.textContent = speedRange.value+'ms/frame'; if(playTimer) startPlayback(true); });
+  cutoffRange.addEventListener('input', ()=>{ cutoffVal.textContent = cutoffRange.value+'%'; if(img) rebuild(); });
+  loopCheck.addEventListener('change', ()=>{ if(img && playTimer) startPlayback(true); });
+  styleSel.addEventListener('change', ()=>{ if(img) rebuild(); });
+
+  playPauseBtn.addEventListener('click', ()=>{
+    if(isPaused){
+      isPaused = false;
+      playPauseBtn.textContent = 'Pause';
+      startPlayback(true);
+    } else {
+      isPaused = true;
+      playPauseBtn.textContent = 'Resume';
+      stopPlayback();
+      setStatus('Paused');
+    }
+  });
+
+  fileInput.addEventListener('change', e=>{
+    if(e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file){
+    if(!file.type.startsWith('image/')){ alert('Please choose an image file.'); return; }
+    fileBaseName = (file.name || 'image').replace(/\.[^.]+$/, '');
+    fileNameLabel.textContent = 'Loaded: ' + file.name;
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      const im = new Image();
+      im.onload = ()=>{
+        img = im;
+        generateGifBtn.disabled = false;
+        rebuild();
+      };
+      im.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function rebuild(){
+    stopPlayback();
+    const targetW = parseInt(widthRange.value, 10);
+    const scale = targetW / img.naturalWidth;
+    outW = targetW;
+    outH = Math.max(1, Math.round(img.naturalHeight * scale));
+    previewCanvas.width = outW;
+    previewCanvas.height = outH;
+
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = outW; srcCanvas.height = outH;
+    const sctx = srcCanvas.getContext('2d');
+    sctx.drawImage(img, 0, 0, outW, outH);
+
+    const steps = parseInt(stepsRange.value, 10);
+    const style = styleSel.value;
+
+    if(style === 'scanline'){
+      frames = buildScanlineFrames(srcCanvas, steps);
+    } else if(style === 'interlace'){
+      frames = buildInterlaceFrames(srcCanvas, steps);
+    } else {
+      frames = buildBlurFrames(srcCanvas, steps);
+    }
+
+    const cutoffPct = parseInt(cutoffRange.value, 10);
+    const cutoffIdx = Math.max(1, Math.round(frames.length * cutoffPct/100));
+    frames = frames.slice(0, cutoffIdx);
+
+    for(let i=0;i<3;i++) frames.push(frames[frames.length-1]);
+
+    isPaused = false;
+    playPauseBtn.textContent = 'Pause';
+    playPauseBtn.disabled = false;
+    startPlayback();
+    genHint.textContent = frames.length + ' frames ready at ' + outW + '\u00d7' + outH +
+      (cutoffPct < 100 ? ' (stops at ' + cutoffPct + '%)' : '');
+  }
+
+  function makeCanvas(){
+    const c = document.createElement('canvas');
+    c.width = outW; c.height = outH;
+    return c;
+  }
+
+  function buildScanlineFrames(srcCanvas, steps){
+    const out = [];
+    for(let i=1;i<=steps;i++){
+      const c = makeCanvas();
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#e9e9e9';
+      ctx.fillRect(0,0,outW,outH);
+      const revealed = Math.round(outH * (i/steps));
+      if(revealed > 0){
+        ctx.drawImage(srcCanvas, 0,0,outW,revealed, 0,0,outW,revealed);
+      }
+      if(revealed < outH){
+        ctx.fillStyle = 'rgba(120,180,255,0.5)';
+        ctx.fillRect(0, Math.max(0,revealed-2), outW, 2);
+      }
+      out.push(c);
+    }
+    return out;
+  }
+
+  function buildInterlaceFrames(srcCanvas, steps){
+    const sctx = srcCanvas.getContext('2d');
+    const srcData = sctx.getImageData(0,0,outW,outH);
+
+    const order = [];
+    for(let y=0;y<outH;y+=8) order.push(y);
+    for(let y=4;y<outH;y+=8) order.push(y);
+    for(let y=2;y<outH;y+=4) order.push(y);
+    for(let y=1;y<outH;y+=2) order.push(y);
+
+    const revealedRow = new Array(outH).fill(false);
+    const rowsPerStep = Math.max(1, Math.ceil(order.length / steps));
+    const out = [];
+    let orderIdx = 0;
+
+    for(let i=0;i<steps;i++){
+      for(let k=0;k<rowsPerStep && orderIdx<order.length;k++, orderIdx++){
+        revealedRow[order[orderIdx]] = true;
+      }
+      const c = makeCanvas();
+      const ctx = c.getContext('2d');
+      const frameData = ctx.createImageData(outW, outH);
+      let lastGood = 0;
+      for(let y=0;y<outH;y++){
+        const useY = revealedRow[y] ? y : lastGood;
+        if(revealedRow[y]) lastGood = y;
+        const srcOff = useY*outW*4;
+        const dstOff = y*outW*4;
+        frameData.data.set(srcData.data.subarray(srcOff, srcOff+outW*4), dstOff);
+      }
+      ctx.putImageData(frameData, 0, 0);
+      out.push(c);
+    }
+    return out;
+  }
+
+  function buildBlurFrames(srcCanvas, steps){
+    const out = [];
+    const minBlocks = 3;
+    for(let i=1;i<=steps;i++){
+      const t = i/steps;
+      const blocksW = Math.max(minBlocks, Math.round(minBlocks + (outW/8 - minBlocks) * Math.pow(t, 1.6)));
+      const tmp = document.createElement('canvas');
+      const blocksH = Math.max(2, Math.round(blocksW * (outH/outW)));
+      tmp.width = blocksW; tmp.height = blocksH;
+      const tctx = tmp.getContext('2d');
+      tctx.imageSmoothingEnabled = true;
+      tctx.drawImage(srcCanvas, 0,0,outW,outH, 0,0,blocksW,blocksH);
+
+      const c = makeCanvas();
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.filter = 'blur(' + Math.max(0, (1-t)*3) + 'px)';
+      ctx.drawImage(tmp, 0,0,blocksW,blocksH, 0,0,outW,outH);
+      ctx.filter = 'none';
+      out.push(c);
+    }
+    return out;
+  }
+
+  function startPlayback(resume){
+    stopPlayback();
+    if(!frames.length) return;
+    if(!resume) playIndex = 0;
+    const delay = parseInt(speedRange.value, 10);
+    setStatus('Downloading ' + fileBaseName + '.jpg ...');
+    playTimer = setInterval(()=>{
+      const f = frames[playIndex];
+      pctx.clearRect(0,0,outW,outH);
+      pctx.drawImage(f, 0, 0);
+      const pct = Math.round(((playIndex+1)/frames.length)*100);
+      pctText.textContent = Math.min(pct,100) + '%';
+      if(playIndex === frames.length-1){
+        setStatus('Done \u2014 ' + fileBaseName + '.jpg loaded');
+        if(!loopCheck.checked){
+          stopPlayback();
+          return;
+        }
+      } else {
+        setStatus('Downloading ' + fileBaseName + '.jpg ...');
+      }
+      playIndex = (playIndex+1) % frames.length;
+    }, delay);
+  }
+  function stopPlayback(){
+    if(playTimer){ clearInterval(playTimer); playTimer = null; }
+  }
+
+  let workerBlobURL = null;
+  async function getWorkerScriptURL(){
+    if(workerBlobURL) return workerBlobURL;
+    const res = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+    if(!res.ok) throw new Error('Could not fetch gif.worker.js (' + res.status + ')');
+    const text = await res.text();
+    const blob = new Blob([text], { type: 'application/javascript' });
+    workerBlobURL = URL.createObjectURL(blob);
+    return workerBlobURL;
+  }
+
+  generateGifBtn.addEventListener('click', async ()=>{
+    if(!frames.length) return;
+    generateGifBtn.disabled = true;
+    outputArea.innerHTML = '';
+    genHint.textContent = 'Preparing encoder\u2026';
+
+    let workerScript;
+    try{
+      workerScript = await getWorkerScriptURL();
+    }catch(err){
+      generateGifBtn.disabled = false;
+      genHint.textContent = 'Error: could not load the GIF encoder (' + err.message + '). Check your connection and try again.';
+      return;
+    }
+
+    genHint.textContent = 'Encoding GIF\u2026';
+
+    const gif = new GIF({
+      workers: Math.min(4, navigator.hardwareConcurrency || 2),
+      quality: 10,
+      width: outW,
+      height: outH,
+      repeat: loopCheck.checked ? 0 : -1,
+      workerScript: workerScript
+    });
+
+    const delay = parseInt(speedRange.value, 10);
+    frames.forEach((c, idx)=>{
+      const isLast = idx === frames.length-1;
+      gif.addFrame(c, { delay: isLast ? delay*8 : delay, copy: true });
+    });
+
+    gif.on('progress', p=>{
+      const pct = Math.round(p*100);
+      genHint.textContent = 'Encoding GIF\u2026 ' + pct + '%';
+    });
+
+    gif.on('finished', blob=>{
+      generateGifBtn.disabled = false;
+      genHint.textContent = 'Done!';
+      const url = URL.createObjectURL(blob);
+      const wrap = document.createElement('div');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileBaseName + '-dialup.gif';
+      link.textContent = 'Download ' + fileBaseName + '-dialup.gif (' + (blob.size/1024).toFixed(0) + ' KB)';
+      const preview = document.createElement('img');
+      preview.src = url;
+      wrap.appendChild(link);
+      wrap.appendChild(preview);
+      outputArea.innerHTML = '';
+      outputArea.appendChild(wrap);
+    });
+
+    gif.render();
+
+    gif.on('abort', ()=>{
+      generateGifBtn.disabled = false;
+      genHint.textContent = 'Encoding was aborted.';
+    });
+  });
+
+})();
+</script>
+
+</body>
+</html>
