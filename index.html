@@ -156,45 +156,36 @@
 
    <script>
         // The JavaScript function called by the button
+        // Each uses innerHTML (not textContent) so the <a> tag renders as a real link
         function changeText1() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "The text has been changed!";
+            document.getElementById("myParagraph").innerHTML = 'Learn more about this project: <a href="project-info.html" target="_blank">View Project Info</a>';
         }
-   function changeText2() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "Now the text is saying something else!";
+        function changeText2() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Compressor works: <a href="compressor.html" target="_blank">View Compressor</a>';
         }
-  function changeText3() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "A third thing!";
+        function changeText3() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Bitmap tool works: <a href="bitmap.html" target="_blank">View Bitmap</a>';
         }
         function changeText4() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "And now a fourth!";
+            document.getElementById("myParagraph").innerHTML = 'See how the Cropper works: <a href="cropper.html" target="_blank">View Cropper</a>';
         }
         function changeText5() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "And now a Fifth!";
+            document.getElementById("myParagraph").innerHTML = 'See how Dial-Up Gifs work: <a href="dial-up-gifs.html" target="_blank">View Dial-Up Gifs</a>';
         }
         function changeText6() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "And now a 6th!";
+            document.getElementById("myParagraph").innerHTML = 'See how DuoTone works: <a href="duotone.html" target="_blank">View DuoTone</a>';
         }
         function changeText7() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "And now a fourth!";
+            document.getElementById("myParagraph").innerHTML = 'See how the Shifter works: <a href="shifter.html" target="_blank">View Shifter</a>';
         }
         function changeText8() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "And now a fourth!";
+            document.getElementById("myParagraph").innerHTML = 'See how the Tiler works: <a href="tiler.html" target="_blank">View Tiler</a>';
         }
         function changeText9() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "And now a fourth!";
+            document.getElementById("myParagraph").innerHTML = 'See how the Posterizer works: <a href="posterizer.html" target="_blank">View Posterizer</a>';
         }
         function changeText10() {
-            // Find the paragraph by its ID and change its text
-            document.getElementById("myParagraph").textContent = "And now a fourth!";
+            document.getElementById("myParagraph").innerHTML = 'See how Contrast works: <a href="contrast.html" target="_blank">View Contrast</a>';
         }
     </script>
 
