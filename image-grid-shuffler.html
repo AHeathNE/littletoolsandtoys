@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image Grid Shuffler</title>
+<style>
+  :root {
+    --bg: #1a1a1e;
+    --panel: #232328;
+    --accent: #7c9eff;
+    --accent-hover: #9db4ff;
+    --text: #e8e8ee;
+    --muted: #8a8a95;
+    --border: #34343c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0 0 20px;
+  }
+  .layout {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .controls {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    width: 240px;
+    flex-shrink: 0;
+  }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  input[type="file"] {
+    font-size: 13px;
+    color: var(--text);
+    width: 100%;
+  }
+  .row2 { display: flex; gap: 10px; }
+  input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  button {
+    width: 100%;
+    background: var(--accent);
+    color: #111;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  button.secondary:hover { background: #2c2c33; }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+  #gridWrap {
+    display: inline-block;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    line-height: 0;
+  }
+  #grid {
+    display: grid;
+  }
+  .tile {
+    background-repeat: no-repeat;
+    cursor: grab;
+    position: relative;
+    outline: 2px solid transparent;
+    outline-offset: -2px;
+    transition: outline-color 0.1s;
+  }
+  .tile:active { cursor: grabbing; }
+  .tile.dragging { opacity: 0.35; }
+  .tile.dragover { outline-color: var(--accent); }
+  .tile .num {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+  #gridWrap:hover .num { opacity: 1; }
+  #empty {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 60px 20px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    width: 420px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Image Grid Shuffler</h1>
+<p class="sub">Upload an image, slice it into a grid, then drag tiles to rearrange (or shuffle automatically).</p>
+
+<div class="layout">
+  <div class="controls">
+    <div class="field">
+      <label>Image</label>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+    <div class="field">
+      <label>Grid size</label>
+      <div class="row2">
+        <input type="number" id="cols" min="2" max="12" value="4">
+        <input type="number" id="rows" min="2" max="12" value="4">
+      </div>
+    </div>
+    <button id="sliceBtn">Slice image</button>
+    <button id="shuffleBtn" class="secondary">Shuffle tiles</button>
+    <button id="resetBtn" class="secondary">Reset order</button>
+    <button id="downloadBtn" class="secondary">Download result</button>
+    <p class="hint">Drag any tile onto another to swap their positions. Grid size is cols × rows.</p>
+  </div>
+
+  <div id="gridWrap">
+    <div id="empty">No image loaded yet</div>
+    <div id="grid" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+let img = null;
+let cols = 4, rows = 4;
+let tileW = 0, tileH = 0;
+let order = [];       // order[displayIndex] = originalTileIndex
+let dragSrc = null;
+
+const fileInput = document.getElementById('fileInput');
+const colsInput = document.getElementById('cols');
+const rowsInput = document.getElementById('rows');
+const sliceBtn = document.getElementById('sliceBtn');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const resetBtn = document.getElementById('resetBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const gridEl = document.getElementById('grid');
+const emptyEl = document.getElementById('empty');
+const gridWrap = document.getElementById('gridWrap');
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const image = new Image();
+    image.onload = () => {
+      img = image;
+      sliceImage();
+    };
+    image.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+sliceBtn.addEventListener('click', sliceImage);
+shuffleBtn.addEventListener('click', shuffleTiles);
+resetBtn.addEventListener('click', () => {
+  order = order.map((_, i) => i);
+  render();
+});
+downloadBtn.addEventListener('click', downloadResult);
+
+function sliceImage() {
+  if (!img) {
+    alert('Please upload an image first.');
+    return;
+  }
+  cols = Math.max(2, Math.min(12, parseInt(colsInput.value) || 4));
+  rows = Math.max(2, Math.min(12, parseInt(rowsInput.value) || 4));
+  colsInput.value = cols;
+  rowsInput.value = rows;
+
+  tileW = img.naturalWidth / cols;
+  tileH = img.naturalHeight / rows;
+
+  order = Array.from({ length: cols * rows }, (_, i) => i);
+  render();
+}
+
+function shuffleTiles() {
+  if (!order.length) return;
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  render();
+}
+
+function render() {
+  if (!img || !order.length) return;
+  emptyEl.style.display = 'none';
+  gridEl.style.display = 'grid';
+
+  // display size capped for usability
+  const maxDisplayWidth = 560;
+  const scale = Math.min(1, maxDisplayWidth / img.naturalWidth);
+  const dispW = img.naturalWidth * scale;
+  const dispH = img.naturalHeight * scale;
+  const dispTileW = dispW / cols;
+  const dispTileH = dispH / rows;
+
+  gridEl.style.gridTemplateColumns = `repeat(${cols}, ${dispTileW}px)`;
+  gridEl.style.gridTemplateRows = `repeat(${rows}, ${dispTileH}px)`;
+  gridEl.style.width = dispW + 'px';
+  gridEl.style.height = dispH + 'px';
+
+  gridEl.innerHTML = '';
+  order.forEach((originalIdx, displayIdx) => {
+    const r = Math.floor(originalIdx / cols);
+    const c = originalIdx % cols;
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.draggable = true;
+    tile.dataset.displayIdx = displayIdx;
+    tile.style.width = dispTileW + 'px';
+    tile.style.height = dispTileH + 'px';
+    tile.style.backgroundImage = `url(${img.src})`;
+    tile.style.backgroundSize = `${dispW}px ${dispH}px`;
+    tile.style.backgroundPosition = `-${c * dispTileW}px -${r * dispTileH}px`;
+
+    const num = document.createElement('span');
+    num.className = 'num';
+    num.textContent = originalIdx + 1;
+    tile.appendChild(num);
+
+    tile.addEventListener('dragstart', onDragStart);
+    tile.addEventListener('dragover', onDragOver);
+    tile.addEventListener('dragleave', onDragLeave);
+    tile.addEventListener('drop', onDrop);
+    tile.addEventListener('dragend', onDragEnd);
+
+    gridEl.appendChild(tile);
+  });
+}
+
+function onDragStart(e) {
+  dragSrc = e.currentTarget;
+  dragSrc.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('dragover');
+}
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('dragover');
+}
+function onDrop(e) {
+  e.preventDefault();
+  const target = e.currentTarget;
+  target.classList.remove('dragover');
+  if (!dragSrc || dragSrc === target) return;
+  const a = parseInt(dragSrc.dataset.displayIdx);
+  const b = parseInt(target.dataset.displayIdx);
+  [order[a], order[b]] = [order[b], order[a]];
+  render();
+}
+function onDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+}
+
+function downloadResult() {
+  if (!img || !order.length) {
+    alert('Slice an image first.');
+    return;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+
+  order.forEach((originalIdx, displayIdx) => {
+    const srcR = Math.floor(originalIdx / cols);
+    const srcC = originalIdx % cols;
+    const dstR = Math.floor(displayIdx / cols);
+    const dstC = displayIdx % cols;
+    ctx.drawImage(
+      img,
+      srcC * tileW, srcR * tileH, tileW, tileH,
+      dstC * tileW, dstR * tileH, tileW, tileH
+    );
+  });
+
+  canvas.toBlob((blob) => {
+    const link = document.createElement('a');
+    link.download = 'grid-shuffled.png';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image Enlarger</title>
+<style>
+  body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+  label { display: block; margin-top: 12px; }
+  input, select { margin-top: 4px; }
+  canvas { max-width: 100%; border: 1px solid #ccc; margin-top: 16px; }
+  #info { margin-top: 12px; font-family: monospace; white-space: pre-line; }
+</style>
+</head>
+<body>
+
+<h1>Image Enlarger</h1>
+
+<label>
+  Choose an image
+  <input type="file" id="file" accept="image/*">
+</label>
+
+<label>
+  Width
+  <input type="number" id="width" min="1">
+</label>
+
+<label>
+  Height
+  <input type="number" id="height" min="1">
+</label>
+
+<label>
+  <input type="checkbox" id="lock" checked>
+  Lock aspect ratio
+</label>
+
+<label>
+  How to fit the new size
+  <select id="mode">
+    <option value="stretch">Stretch to exact size</option>
+    <option value="fill">Fill and crop</option>
+    <option value="pad">Fit and pad</option>
+  </select>
+</label>
+
+<p>
+  <button id="downloadBtn">Download result</button>
+</p>
+
+<div id="info"></div>
+<canvas id="canvas"></canvas>
+
+<script>
+  let img = null, origW = 0, origH = 0;
+  const fileInput = document.getElementById('file');
+  const widthInput = document.getElementById('width');
+  const heightInput = document.getElementById('height');
+  const lockInput = document.getElementById('lock');
+  const modeInput = document.getElementById('mode');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const info = document.getElementById('info');
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const image = new Image();
+      image.onload = () => {
+        img = image;
+        origW = image.naturalWidth;
+        origH = image.naturalHeight;
+        widthInput.value = origW;
+        heightInput.value = origH;
+        draw();
+      };
+      image.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  widthInput.addEventListener('input', () => {
+    if (lockInput.checked && origW) {
+      heightInput.value = Math.round(widthInput.value * origH / origW);
+    }
+    draw();
+  });
+
+  heightInput.addEventListener('input', () => {
+    if (lockInput.checked && origH) {
+      widthInput.value = Math.round(heightInput.value * origW / origH);
+    }
+    draw();
+  });
+
+  modeInput.addEventListener('change', draw);
+
+  function draw() {
+    if (!img) return;
+    const w = parseInt(widthInput.value) || origW;
+    const h = parseInt(heightInput.value) || origH;
+    canvas.width = w;
+    canvas.height = h;
+
+    const mode = modeInput.value;
+    if (mode === 'stretch') {
+      ctx.drawImage(img, 0, 0, w, h);
+    } else if (mode === 'fill') {
+      const scale = Math.max(w / origW, h / origH);
+      const dw = origW * scale, dh = origH * scale;
+      ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    } else {
+      const scale = Math.min(w / origW, h / origH);
+      const dw = origW * scale, dh = origH * scale;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    }
+
+    const factor = Math.sqrt((w * h) / (origW * origH));
+    info.textContent =
+      'Original: ' + origW + ' x ' + origH + '\n' +
+      'New: ' + w + ' x ' + h + '\n' +
+      'Scale factor: ' + factor.toFixed(2) + 'x';
+  }
+
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'enlarged.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+</script>
+
+</body>
+</html>

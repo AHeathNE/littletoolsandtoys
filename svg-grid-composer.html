@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid Composer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#1c1b1a;
+    --paper:#f6f4ef;
+    --panel:#ffffff;
+    --line:#dcd8cf;
+    --accent:#ff5a36;
+    --accent-ink:#3a1a10;
+    --muted:#8a8579;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    overflow:hidden;
+  }
+
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    background:var(--panel);
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  header h1{
+    font-size:15px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    font-weight:700;
+    margin:0;
+    font-family:var(--mono);
+  }
+  header h1 span{color:var(--accent);}
+
+  .controls-row{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .field{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:11px;
+    font-family:var(--mono);
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  .field input[type=number]{
+    width:52px;
+    padding:5px 6px;
+    border:1px solid var(--line);
+    border-radius:5px;
+    font-family:var(--mono);
+    font-size:12px;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .field input[type=color]{
+    width:28px;height:28px;border:1px solid var(--line);border-radius:6px;padding:0;background:none;cursor:pointer;
+  }
+  .field span.x{color:var(--muted);}
+
+  button{
+    font-family:var(--mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    border:1px solid var(--ink);
+    background:var(--panel);
+    color:var(--ink);
+    padding:7px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    transition:background .12s, color .12s, transform .05s;
+  }
+  button:hover{background:var(--ink);color:var(--panel);}
+  button:active{transform:scale(.96);}
+  button.primary{background:var(--ink);color:var(--panel);}
+  button.primary:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.ghost{border-color:var(--line);color:var(--muted);}
+  button.ghost:hover{background:var(--paper);color:var(--ink);}
+
+  .export-group{display:flex;gap:6px;}
+
+  main{
+    flex:1;
+    display:flex;
+    overflow:hidden;
+  }
+
+  aside{
+    width:220px;
+    min-width:220px;
+    border-right:1px solid var(--line);
+    background:var(--panel);
+    display:flex;
+    flex-direction:column;
+    padding:16px;
+    overflow-y:auto;
+  }
+  aside h2{
+    font-family:var(--mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--muted);
+    margin:0 0 10px 0;
+  }
+  .toolbox{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .tool{
+    position:relative;
+    border:2px solid var(--line);
+    border-radius:8px;
+    background:var(--paper);
+    aspect-ratio:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    padding:10px;
+  }
+  .tool svg{width:100%;height:100%;display:block;transition:transform .15s ease;}
+  .tool.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,90,54,.18);}
+  .tool .keybadge{
+    position:absolute;
+    top:2px;left:2px;
+    width:16px;height:16px;
+    border-radius:4px;
+    background:var(--ink);
+    color:var(--panel);
+    font-family:var(--mono);
+    font-size:9px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .tool.selected .keybadge{background:var(--accent);}
+  .tool .swatch{
+    position:absolute;
+    bottom:3px;right:3px;
+    width:16px;height:16px;
+    border:none;
+    border-radius:50%;
+    padding:0;
+    cursor:pointer;
+  }
+  .tool .del{
+    position:absolute;
+    top:2px;right:2px;
+    width:16px;height:16px;
+    border-radius:50%;
+    border:none;
+    background:var(--ink);
+    color:var(--panel);
+    font-size:10px;
+    line-height:16px;
+    text-align:center;
+    padding:0;
+    cursor:pointer;
+    display:none;
+  }
+  .tool.custom:hover .del{display:block;}
+  .tool.eraser{
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;
+  }
+
+  .add-tool{
+    border-top:1px solid var(--line);
+    padding-top:14px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .add-tool textarea{
+    width:100%;
+    height:64px;
+    font-family:var(--mono);
+    font-size:10px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:6px;
+    resize:vertical;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .hint{font-size:10px;color:var(--muted);line-height:1.4;}
+
+  .canvas-wrap{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:auto;
+    padding:30px;
+    background:
+      linear-gradient(45deg, #eeece5 25%, transparent 25%),
+      linear-gradient(-45deg, #eeece5 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #eeece5 75%),
+      linear-gradient(-45deg, transparent 75%, #eeece5 75%);
+    background-size:20px 20px;
+    background-position:0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+
+  #grid{
+    display:grid;
+    background:var(--gridbg, #ffffff);
+    box-shadow:0 4px 24px rgba(0,0,0,.12);
+  }
+  .cell{
+    border:1px solid rgba(0,0,0,.08);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    padding:6%;
+    user-select:none;
+  }
+  .cell svg{width:100%;height:100%;pointer-events:none;}
+  .cell:hover{background:rgba(255,90,54,.08);}
+
+  #file-input{display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Grid<span>/</span>Composer</h1>
+  <div class="controls-row">
+    <div class="field">Rows <input type="number" id="rows" value="6" min="1" max="40"></div>
+    <div class="field">Cols <input type="number" id="cols" value="6" min="1" max="40"></div>
+    <div class="field">Ratio
+      <input type="number" id="ratioW" value="1" min="1" max="20" style="width:36px">
+      <span class="x">:</span>
+      <input type="number" id="ratioH" value="1" min="1" max="20" style="width:36px">
+    </div>
+    <div class="field">Gap <input type="number" id="gap" value="2" min="0" max="30"></div>
+    <div class="field">Bg <input type="color" id="bgColor" value="#ffffff"></div>
+    <button class="ghost" id="clearBtn">Clear grid</button>
+  </div>
+  <div class="export-group">
+    <button id="exportSvg">Export SVG</button>
+    <button id="exportPng">Export PNG</button>
+    <button class="primary" id="exportPdf">Export PDF</button>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <h2>Toolbox</h2>
+    <div class="toolbox" id="toolbox"></div>
+
+    <div class="add-tool">
+      <h2 style="margin-top:0">Add SVG</h2>
+      <button id="uploadBtn">Upload .svg file</button>
+      <input type="file" id="file-input" accept=".svg,image/svg+xml">
+      <textarea id="pasteArea" placeholder="...or paste raw SVG markup here"></textarea>
+      <button id="pasteAddBtn">Add pasted SVG</button>
+      <div class="hint">Click a shape to select it as your brush, then click cells to stamp it. Click a filled cell with the same shape to erase it. Hover a custom shape for a delete button.</div>
+    </div>
+  </aside>
+
+  <div class="canvas-wrap">
+    <div id="grid"></div>
+  </div>
+</main>
+
+<script>
+(function(){
+  const state = {
+    rows: 6,
+    cols: 6,
+    ratioW: 1,
+    ratioH: 1,
+    gap: 2,
+    bgColor: "#ffffff",
+    selectedTool: null,
+    tools: [
+      { id:"full", name:"Full", custom:false, color:"#1c1b1a",
+        markup:'<rect x="4" y="4" width="92" height="92" rx="8" fill="currentColor"/>' },
+      { id:"x", name:"X", custom:false, color:"#1c1b1a",
+        markup:'<path d="M18 18 L82 82 M82 18 L18 82" stroke="currentColor" stroke-width="12" stroke-linecap="round" fill="none"/>' },
+      { id:"plus", name:"Plus", custom:false, color:"#1c1b1a",
+        markup:'<path d="M50 12 L50 88 M12 50 L88 50" stroke="currentColor" stroke-width="12" stroke-linecap="round" fill="none"/>' },
+      { id:"circle", name:"Circle", custom:false, color:"#1c1b1a",
+        markup:'<circle cx="50" cy="50" r="42" fill="currentColor"/>' },
+      { id:"arrow", name:"Arrow", custom:false, color:"#1c1b1a",
+        markup:'<path d="M12 35 H55 V15 L88 50 L55 85 V65 H12 Z" fill="currentColor"/>' }
+    ],
+    grid: [] // rows x cols of { tool, rotation } or null
+  };
+
+  // each tool carries its own "current" rotation (0/90/180/270), which is
+  // baked into a cell at the moment it's stamped
+  state.tools.forEach(t => t.rotation = 0);
+
+  function makeGrid(rows, cols, oldGrid){
+    const g = [];
+    for(let r=0;r<rows;r++){
+      const row = [];
+      for(let c=0;c<cols;c++){
+        row.push(oldGrid && oldGrid[r] && oldGrid[r][c] !== undefined ? oldGrid[r][c] : null);
+      }
+      g.push(row);
+    }
+    return g;
+  }
+  state.grid = makeGrid(state.rows, state.cols, null);
+
+  function toolById(id){ return state.tools.find(t => t.id === id); }
+
+  function renderToolbox(){
+    const box = document.getElementById('toolbox');
+    box.innerHTML = '';
+    state.tools.forEach((tool, i) => {
+      const el = document.createElement('div');
+      el.className = 'tool' + (tool.custom ? ' custom' : '') + (state.selectedTool === tool.id ? ' selected' : '');
+      el.innerHTML = `<svg viewBox="${tool.viewBox || '0 0 100 100'}" style="color:${tool.color};transform:rotate(${tool.rotation}deg)">${tool.markup}</svg>`;
+
+      if(i < 10){
+        const badge = document.createElement('div');
+        badge.className = 'keybadge';
+        badge.textContent = i === 9 ? '0' : String(i + 1);
+        el.appendChild(badge);
+      }
+
+      el.addEventListener('click', (e) => {
+        if(e.target.closest('.swatch') || e.target.closest('.del')) return;
+        state.selectedTool = (state.selectedTool === tool.id) ? null : tool.id;
+        renderToolbox();
+      });
+
+      const swatch = document.createElement('input');
+      swatch.type = 'color';
+      swatch.className = 'swatch';
+      swatch.value = tool.color;
+      swatch.title = 'Recolor';
+      swatch.addEventListener('input', (e) => {
+        tool.color = e.target.value;
+        renderToolbox();
+        renderGrid();
+      });
+      el.appendChild(swatch);
+
+      if(tool.custom){
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = '✕';
+        del.title = 'Remove shape';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.tools = state.tools.filter(t => t.id !== tool.id);
+          if(state.selectedTool === tool.id) state.selectedTool = null;
+          state.grid = state.grid.map(row => row.map(c => (c && c.tool === tool.id) ? null : c));
+          renderToolbox();
+          renderGrid();
+        });
+        el.appendChild(del);
+      }
+
+      box.appendChild(el);
+    });
+  }
+
+  function renderGrid(){
+    const gridEl = document.getElementById('grid');
+    const wrap = document.querySelector('.canvas-wrap');
+    gridEl.style.setProperty('--gridbg', state.bgColor);
+    gridEl.style.background = state.bgColor;
+    gridEl.style.gap = state.gap + 'px';
+
+    const availW = wrap.clientWidth - 60;
+    const availH = wrap.clientHeight - 60;
+    const cellRatio = state.ratioW / state.ratioH;
+    let cellW = (availW - (state.cols - 1) * state.gap) / state.cols;
+    let cellH = cellW / cellRatio;
+    if(cellH * state.rows + (state.rows - 1) * state.gap > availH){
+      cellH = (availH - (state.rows - 1) * state.gap) / state.rows;
+      cellW = cellH * cellRatio;
+    }
+
+    gridEl.style.gridTemplateColumns = `repeat(${state.cols}, ${cellW}px)`;
+    gridEl.style.gridTemplateRows = `repeat(${state.rows}, ${cellH}px)`;
+    gridEl.innerHTML = '';
+
+    for(let r=0;r<state.rows;r++){
+      for(let c=0;c<state.cols;c++){
+        const cellEl = document.createElement('div');
+        cellEl.className = 'cell';
+        const cellData = state.grid[r][c];
+        if(cellData){
+          const tool = toolById(cellData.tool);
+          if(tool){
+            cellEl.innerHTML = `<svg viewBox="${tool.viewBox || '0 0 100 100'}" style="color:${tool.color};transform:rotate(${cellData.rotation}deg)">${tool.markup}</svg>`;
+          }
+        }
+        cellEl.addEventListener('click', () => {
+          if(!state.selectedTool) return;
+          const current = state.grid[r][c];
+          if(current && current.tool === state.selectedTool){
+            state.grid[r][c] = null;
+          }else{
+            const tool = toolById(state.selectedTool);
+            state.grid[r][c] = { tool: state.selectedTool, rotation: tool ? tool.rotation : 0 };
+          }
+          renderGrid();
+        });
+        gridEl.appendChild(cellEl);
+      }
+    }
+  }
+
+  // --- controls ---
+  document.getElementById('rows').addEventListener('input', (e) => {
+    state.rows = Math.max(1, parseInt(e.target.value) || 1);
+    state.grid = makeGrid(state.rows, state.cols, state.grid);
+    renderGrid();
+  });
+  document.getElementById('cols').addEventListener('input', (e) => {
+    state.cols = Math.max(1, parseInt(e.target.value) || 1);
+    state.grid = makeGrid(state.rows, state.cols, state.grid);
+    renderGrid();
+  });
+  document.getElementById('ratioW').addEventListener('input', (e) => {
+    state.ratioW = Math.max(1, parseFloat(e.target.value) || 1);
+    renderGrid();
+  });
+  document.getElementById('ratioH').addEventListener('input', (e) => {
+    state.ratioH = Math.max(1, parseFloat(e.target.value) || 1);
+    renderGrid();
+  });
+  document.getElementById('gap').addEventListener('input', (e) => {
+    state.gap = Math.max(0, parseInt(e.target.value) || 0);
+    renderGrid();
+  });
+  document.getElementById('bgColor').addEventListener('input', (e) => {
+    state.bgColor = e.target.value;
+    renderGrid();
+  });
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    state.grid = makeGrid(state.rows, state.cols, null);
+    renderGrid();
+  });
+
+  window.addEventListener('resize', renderGrid);
+
+  // --- number-key binding: 1-9 then 0 map to toolbox slots ---
+  window.addEventListener('keydown', (e) => {
+    const active = document.activeElement;
+    if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+    if(!/^[0-9]$/.test(e.key)) return;
+
+    const index = e.key === '0' ? 9 : parseInt(e.key, 10) - 1;
+    const tool = state.tools[index];
+    if(!tool) return;
+
+    if(state.selectedTool === tool.id){
+      tool.rotation = (tool.rotation + 90) % 360;
+    }else{
+      state.selectedTool = tool.id;
+    }
+    renderToolbox();
+  });
+
+  // --- adding custom svgs ---
+  function addSvgFromString(str){
+    try{
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(str, 'image/svg+xml');
+      const svgEl = doc.querySelector('svg');
+      if(!svgEl || doc.querySelector('parsererror')) throw new Error('bad svg');
+      const viewBox = svgEl.getAttribute('viewBox') || '0 0 100 100';
+      const markup = svgEl.innerHTML;
+      const id = 'custom-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+      state.tools.push({ id, name:'Custom', custom:true, color:'#1c1b1a', markup, viewBox });
+      renderToolbox();
+    }catch(err){
+      alert('Could not read that as valid SVG markup.');
+    }
+  }
+
+  document.getElementById('uploadBtn').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+  });
+  document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => addSvgFromString(ev.target.result);
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+  document.getElementById('pasteAddBtn').addEventListener('click', () => {
+    const val = document.getElementById('pasteArea').value.trim();
+    if(!val) return;
+    addSvgFromString(val);
+    document.getElementById('pasteArea').value = '';
+  });
+
+  // --- export ---
+  function buildExportSvgString(){
+    const cellRatio = state.ratioW / state.ratioH;
+    const totalW = 1000;
+    const cellW = (totalW - (state.cols - 1) * state.gap * (totalW/ (state.cols*100))) / state.cols;
+    // simpler: fixed unit cell of 100, scale gap proportionally
+    const unit = 100;
+    const gapUnit = state.gap; // px-ish in same unit space
+    const cw = unit;
+    const ch = unit / cellRatio;
+    const fullW = state.cols * cw + (state.cols - 1) * gapUnit;
+    const fullH = state.rows * ch + (state.rows - 1) * gapUnit;
+
+    let inner = `<rect x="0" y="0" width="${fullW}" height="${fullH}" fill="${state.bgColor}"/>`;
+
+    for(let r=0;r<state.rows;r++){
+      for(let c=0;c<state.cols;c++){
+        const toolId = state.grid[r][c];
+        if(!toolId) continue;
+        const tool = toolById(toolId);
+        if(!tool) continue;
+        const x = c * (cw + gapUnit);
+        const y = r * (ch + gapUnit);
+        const vb = (tool.viewBox || '0 0 100 100').split(/\s+/).map(Number);
+        const vbW = vb[2] || 100, vbH = vb[3] || 100;
+        const sx = cw / vbW, sy = ch / vbH;
+        inner += `<g transform="translate(${x},${y}) scale(${sx},${sy})" style="color:${tool.color}">${tool.markup}</g>`;
+      }
+    }
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fullW} ${fullH}" width="${fullW}" height="${fullH}">${inner}</svg>`;
+  }
+
+  function download(filename, blob){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('exportSvg').addEventListener('click', () => {
+    const svgStr = buildExportSvgString();
+    download('grid-composition.svg', new Blob([svgStr], {type:'image/svg+xml'}));
+  });
+
+  function svgToCanvas(scale, cb){
+    const svgStr = buildExportSvgString();
+    const svgBlob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      cb(canvas);
+    };
+    img.src = url;
+  }
+
+  document.getElementById('exportPng').addEventListener('click', () => {
+    svgToCanvas(3, (canvas) => {
+      canvas.toBlob((blob) => download('grid-composition.png', blob), 'image/png');
+    });
+  });
+
+  document.getElementById('exportPdf').addEventListener('click', () => {
+    svgToCanvas(3, (canvas) => {
+      const { jsPDF } = window.jspdf;
+      const w = canvas.width, h = canvas.height;
+      const orientation = w >= h ? 'landscape' : 'portrait';
+      const pdf = new jsPDF({ orientation, unit:'pt', format:[w, h] });
+      const dataUrl = canvas.toDataURL('image/png');
+      pdf.addImage(dataUrl, 'PNG', 0, 0, w, h);
+      pdf.save('grid-composition.pdf');
+    });
+  });
+
+  renderToolbox();
+  renderGrid();
+})();
+</script>
+</body>
+</html>

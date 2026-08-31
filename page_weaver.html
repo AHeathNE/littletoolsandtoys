@@ -1,0 +1,769 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+<style>
+  :root{
+    --parchment: #E9DDBE;
+    --parchment-dark: #DCCB9F;
+    --leather: #3B2A1A;
+    --leather-deep: #241A11;
+    --ink: #241C14;
+    --gold: #B4892B;
+    --gold-bright: #D9AE4E;
+    --wax: #7A2E22;
+    --rune-teal: #2C5F56;
+  }
+
+  *{ box-sizing:border-box; }
+
+  .weaver-root{
+    font-family: 'Spectral', Georgia, serif;
+    background:
+      radial-gradient(ellipse at top left, rgba(180,137,43,0.10), transparent 55%),
+      radial-gradient(ellipse at bottom right, rgba(44,95,86,0.10), transparent 55%),
+      var(--parchment);
+    color: var(--ink);
+    min-height: 100%;
+    padding: 40px 20px 56px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .weaver-root::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:
+      repeating-linear-gradient(90deg, rgba(36,26,17,0.03) 0 1px, transparent 1px 90px),
+      repeating-linear-gradient(0deg, rgba(36,26,17,0.03) 0 1px, transparent 1px 90px);
+    pointer-events:none;
+  }
+
+  .weaver-shell{ max-width: 760px; margin: 0 auto; position: relative; }
+
+  .weaver-header{ text-align:center; margin-bottom: 26px; }
+
+  .weaver-eyebrow{
+    font-family:'Cinzel', serif; font-size: 11px; letter-spacing: 0.32em;
+    text-transform: uppercase; color: var(--rune-teal); margin: 0 0 10px; opacity: 0.85;
+  }
+
+  .weaver-title{
+    font-family:'Cinzel', serif; font-weight: 700; font-size: clamp(28px, 4.5vw, 40px);
+    letter-spacing: 0.02em; color: var(--leather-deep); margin: 0 0 12px;
+  }
+
+  .weaver-sub{
+    font-size: 15px; line-height: 1.6; color: rgba(36,26,17,0.72);
+    max-width: 480px; margin: 0 auto; font-style: italic;
+  }
+
+  .weaver-divider{ width: 120px; height: 14px; margin: 20px auto 0; opacity: 0.8; }
+
+  /* Tabs */
+  .weaver-tabs{
+    display:flex; gap: 8px; max-width: 480px; margin: 0 auto 28px;
+    border-bottom: 1.5px solid rgba(36,26,17,0.18);
+  }
+
+  .weaver-tab{
+    flex:1; font-family:'Cinzel', serif; font-size: 12.5px; letter-spacing: 0.06em;
+    text-transform: uppercase; text-align:center; padding: 12px 8px 14px; cursor:pointer;
+    background:none; border:none; color: rgba(36,26,17,0.5); position: relative;
+    transition: color 0.15s ease;
+  }
+
+  .weaver-tab.active{ color: var(--leather-deep); }
+
+  .weaver-tab.active::after{
+    content:""; position:absolute; left:10%; right:10%; bottom:-1.5px; height: 2.5px;
+    background: var(--gold); border-radius: 2px;
+  }
+
+  .weaver-tab:hover{ color: var(--leather-deep); }
+
+  .weaver-panel{ display:none; }
+  .weaver-panel.active{ display:block; }
+
+  .weaver-card{
+    background: linear-gradient(180deg, rgba(255,251,240,0.55), rgba(255,251,240,0.28));
+    border: 1px solid rgba(36,26,17,0.18); border-radius: 4px; padding: 28px 28px 24px;
+    margin-bottom: 22px; box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset, 0 8px 24px -18px rgba(36,26,17,0.6);
+    position: relative;
+  }
+
+  .weaver-seq{ display:flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+
+  .weaver-seq-num{
+    font-family:'Cinzel', serif; font-weight: 700; font-size: 13px; color: var(--parchment);
+    background: var(--leather); width: 26px; height: 26px; border-radius: 2px;
+    display:flex; align-items:center; justify-content:center; flex-shrink: 0; transform: rotate(-2deg);
+  }
+
+  .weaver-seq-label{ font-family:'Cinzel', serif; font-size: 14px; letter-spacing: 0.06em; color: var(--leather-deep); text-transform: uppercase; }
+
+  .weaver-seq-hint{ font-size: 12.5px; color: rgba(36,26,17,0.55); margin-left: auto; text-align: right; font-style: italic; }
+
+  .weaver-row{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 620px){ .weaver-row{ grid-template-columns: 1fr; } }
+
+  .weaver-slot{ position: relative; }
+  .weaver-slot input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+
+  .weaver-slot-box{
+    border: 1.5px dashed rgba(36,26,17,0.32); border-radius: 3px; padding: 16px 12px; text-align: center;
+    min-height: 86px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 4px;
+    transition: border-color 0.15s ease, background 0.15s ease; background: rgba(255,255,255,0.18);
+  }
+
+  .weaver-slot:hover .weaver-slot-box{ border-color: var(--gold); background: rgba(217,174,78,0.10); }
+  .weaver-slot-box.has-file{ border-style: solid; border-color: var(--rune-teal); background: rgba(44,95,86,0.08); }
+
+  .weaver-slot-name{ font-family:'Cinzel', serif; font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--leather-deep); opacity: 0.8; }
+  .weaver-slot-file{ font-size: 12px; color: var(--rune-teal); word-break: break-all; max-width: 100%; }
+  .weaver-slot-empty{ font-size: 11px; color: rgba(36,26,17,0.4); }
+
+  .weaver-pair{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 620px){ .weaver-pair{ grid-template-columns: 1fr; } }
+
+  .weaver-order{ display:flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+  .weaver-order-btn{
+    flex: 1; min-width: 200px; font-family:'Spectral', serif; font-size: 13.5px; padding: 11px 14px;
+    border: 1.5px solid rgba(36,26,17,0.28); border-radius: 3px; background: rgba(255,255,255,0.25);
+    color: var(--ink); cursor: pointer; transition: all 0.15s ease; text-align: left;
+  }
+
+  .weaver-order-btn b{ font-family:'Cinzel', serif; display:block; font-size: 12px; letter-spacing: 0.04em; color: var(--leather-deep); margin-bottom: 3px; }
+  .weaver-order-btn.active{ border-color: var(--gold); background: rgba(217,174,78,0.16); box-shadow: 0 0 0 1px var(--gold) inset; }
+  .weaver-order-btn:hover{ border-color: var(--gold-bright); }
+
+  /* Quick merge dropzone */
+  .weaver-dropzone{
+    border: 2px dashed rgba(36,26,17,0.3); border-radius: 5px; padding: 34px 20px; text-align:center;
+    position: relative; background: rgba(255,255,255,0.18); transition: all 0.15s ease; cursor: pointer;
+  }
+
+  .weaver-dropzone.drag{ border-color: var(--gold); background: rgba(217,174,78,0.14); }
+  .weaver-dropzone input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+
+  .weaver-dropzone-title{ font-family:'Cinzel', serif; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--leather-deep); margin-bottom: 6px; }
+  .weaver-dropzone-sub{ font-size: 12.5px; color: rgba(36,26,17,0.55); font-style: italic; }
+
+  .weaver-filelist{ margin-top: 18px; display:flex; flex-direction:column; gap: 8px; }
+
+  .weaver-file-row{
+    display:flex; align-items:center; gap: 10px; padding: 9px 10px 9px 8px; border: 1.5px solid rgba(36,26,17,0.15);
+    border-radius: 3px; background: rgba(255,255,255,0.3); font-size: 13px; cursor: grab;
+    transition: border-color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+  }
+
+  .weaver-file-row.dragging{ opacity: 0.4; cursor: grabbing; }
+  .weaver-file-row.drag-over{ border-color: var(--gold); background: rgba(217,174,78,0.14); }
+
+  .weaver-file-handle{
+    color: rgba(36,26,17,0.35); font-size: 14px; letter-spacing: -1px; flex-shrink: 0;
+    user-select: none; line-height: 1;
+  }
+
+  .weaver-file-order{
+    font-family:'Cinzel', serif; font-weight:700; font-size: 12px; color: var(--parchment);
+    background: var(--rune-teal); width: 24px; height: 24px; border-radius: 2px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+
+  .weaver-file-name{ flex:1; word-break: break-all; }
+
+  .weaver-file-moves{ display:flex; flex-direction:column; gap: 1px; flex-shrink:0; }
+  .weaver-file-move{
+    background:none; border:none; color: rgba(36,26,17,0.45); cursor:pointer; font-size: 10px;
+    line-height:1; padding: 2px 4px; border-radius: 2px;
+  }
+  .weaver-file-move:hover:not(:disabled){ color: var(--leather-deep); background: rgba(36,26,17,0.08); }
+  .weaver-file-move:disabled{ opacity: 0.25; cursor: default; }
+
+  .weaver-file-remove{ background:none; border:none; color: var(--wax); cursor:pointer; font-size: 16px; line-height:1; padding: 0 4px; flex-shrink:0; }
+  .weaver-file-remove:hover{ opacity: 0.6; }
+
+  .weaver-filelist-note{ font-size: 12px; color: rgba(36,26,17,0.5); margin-top: 10px; font-style: italic; }
+
+  .weaver-assemble{ display:flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 30px; }
+
+  .weaver-btn{
+    font-family:'Cinzel', serif; font-size: 14.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--parchment); background: linear-gradient(180deg, #4A3520, var(--leather-deep));
+    border: 1px solid rgba(0,0,0,0.4); border-radius: 3px; padding: 15px 42px; cursor: pointer;
+    position: relative; box-shadow: 0 2px 0 rgba(0,0,0,0.3), 0 10px 22px -12px rgba(36,26,17,0.7);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .weaver-btn:hover:not(:disabled){ transform: translateY(-1px); box-shadow: 0 3px 0 rgba(0,0,0,0.3), 0 14px 26px -12px rgba(36,26,17,0.75); }
+  .weaver-btn:active:not(:disabled){ transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
+  .weaver-btn:disabled{ opacity: 0.45; cursor: not-allowed; }
+
+  .weaver-status{ font-size: 13px; color: rgba(36,26,17,0.7); min-height: 18px; text-align: center; font-style: italic; }
+  .weaver-status.error{ color: var(--wax); font-style: normal; font-weight: 600; }
+  .weaver-status.success{ color: var(--rune-teal); font-style: normal; font-weight: 600; }
+
+  .weaver-progress-track{
+    width: 100%; max-width: 320px; height: 6px; border-radius: 3px; background: rgba(36,26,17,0.15);
+    overflow: hidden; display: none;
+  }
+
+  .weaver-progress-track.show{ display: block; }
+  .weaver-progress-fill{ height: 100%; width: 0%; background: linear-gradient(90deg, var(--rune-teal), var(--gold-bright)); transition: width 0.2s ease; }
+
+  .weaver-downloads{ display:flex; flex-direction: column; align-items:center; gap: 10px; margin-top: 4px; }
+
+  .weaver-download{
+    display: none; align-items: center; gap: 10px; font-size: 13.5px; color: var(--rune-teal);
+    text-decoration: none; font-weight: 600; border-bottom: 1px solid var(--rune-teal); padding-bottom: 2px;
+  }
+
+  .weaver-download.show{ display:inline-flex; }
+  .weaver-download.secondary{ color: var(--leather); border-bottom-color: var(--leather); }
+
+  .weaver-reset{
+    background: none; border: none; font-family: 'Spectral', serif; font-size: 12.5px;
+    color: rgba(36,26,17,0.5); text-decoration: underline; cursor: pointer; margin-top: 4px;
+  }
+
+  .weaver-reset:hover{ color: var(--wax); }
+</style>
+
+<div class="weaver-root">
+  <div class="weaver-shell">
+
+    <div class="weaver-header">
+      <p class="weaver-eyebrow">Bindery Tool</p>
+      <h1 class="weaver-title">The Page Weaver</h1>
+      <p class="weaver-sub">Bind covers, blanks, and two runs of pages into one tome — or just drop in a stack of files and let numbers in their names decide the order.</p>
+      <svg class="weaver-divider" viewBox="0 0 120 14" fill="none">
+        <line x1="0" y1="7" x2="46" y2="7" stroke="#B4892B" stroke-width="1.5"/>
+        <line x1="74" y1="7" x2="120" y2="7" stroke="#B4892B" stroke-width="1.5"/>
+        <circle cx="60" cy="7" r="5" fill="none" stroke="#2C5F56" stroke-width="1.5"/>
+        <circle cx="60" cy="7" r="1.6" fill="#2C5F56"/>
+      </svg>
+    </div>
+
+    <div class="weaver-tabs">
+      <button class="weaver-tab active" data-tab="structured">Structured Bind</button>
+      <button class="weaver-tab" data-tab="quick">Quick Merge</button>
+    </div>
+
+    <!-- STRUCTURED PANEL -->
+    <div class="weaver-panel active" id="panel-structured">
+      <div class="weaver-card">
+        <div class="weaver-seq">
+          <span class="weaver-seq-num">1</span>
+          <span class="weaver-seq-label">Covers &amp; Blank Leaf</span>
+          <span class="weaver-seq-hint">single PDFs, optional</span>
+        </div>
+        <div class="weaver-row">
+          <div class="weaver-slot" id="slot-cover">
+            <input type="file" accept="application/pdf" data-slot="cover">
+            <div class="weaver-slot-box"><span class="weaver-slot-name">Cover</span><span class="weaver-slot-empty">Drop or choose file</span></div>
+          </div>
+          <div class="weaver-slot" id="slot-blank">
+            <input type="file" accept="application/pdf" data-slot="blank">
+            <div class="weaver-slot-box"><span class="weaver-slot-name">Blank Leaf</span><span class="weaver-slot-empty">Drop or choose file</span></div>
+          </div>
+          <div class="weaver-slot" id="slot-back">
+            <input type="file" accept="application/pdf" data-slot="back">
+            <div class="weaver-slot-box"><span class="weaver-slot-name">Back Cover</span><span class="weaver-slot-empty">Drop or choose file</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="weaver-card">
+        <div class="weaver-seq">
+          <span class="weaver-seq-num">2</span>
+          <span class="weaver-seq-label">The Two Runs</span>
+          <span class="weaver-seq-hint">.zip of numbered page PDFs</span>
+        </div>
+        <div class="weaver-pair">
+          <div class="weaver-slot" id="slot-left">
+            <input type="file" accept=".zip,application/zip" data-slot="left">
+            <div class="weaver-slot-box"><span class="weaver-slot-name">Left Run</span><span class="weaver-slot-empty">Drop or choose .zip</span></div>
+          </div>
+          <div class="weaver-slot" id="slot-right">
+            <input type="file" accept=".zip,application/zip" data-slot="right">
+            <div class="weaver-slot-box"><span class="weaver-slot-name">Right Run</span><span class="weaver-slot-empty">Drop or choose .zip</span></div>
+          </div>
+        </div>
+
+        <div class="weaver-order" id="order-buttons">
+          <button type="button" class="weaver-order-btn active" data-order="left-first">
+            <b>Left Leads</b> Left 1 → Right 1 → Left 2 → Right 2 …
+          </button>
+          <button type="button" class="weaver-order-btn" data-order="right-first">
+            <b>Right Leads</b> Right 1 → Left 1 → Right 2 → Left 2 …
+          </button>
+        </div>
+      </div>
+
+      <div class="weaver-assemble">
+        <button class="weaver-btn" id="assemble-btn" disabled>Bind the Tome</button>
+        <div class="weaver-progress-track" id="progress-track"><div class="weaver-progress-fill" id="progress-fill"></div></div>
+        <p class="weaver-status" id="status-text">Awaiting your two runs of pages.</p>
+        <div class="weaver-downloads">
+          <a class="weaver-download" id="download-combined" download="Combined.pdf">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
+            <span id="download-combined-label">Download combined tome</span>
+          </a>
+          <a class="weaver-download secondary" id="download-individual" download="Individual_Pages.zip">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>
+            <span id="download-individual-label">Download individual pages (zip)</span>
+          </a>
+        </div>
+        <button class="weaver-reset" id="reset-btn">Start over</button>
+      </div>
+    </div>
+
+    <!-- QUICK MERGE PANEL -->
+    <div class="weaver-panel" id="panel-quick">
+      <div class="weaver-card">
+        <div class="weaver-seq">
+          <span class="weaver-seq-num">1</span>
+          <span class="weaver-seq-label">Drop Your Pages</span>
+          <span class="weaver-seq-hint">sorted by number in filename</span>
+        </div>
+        <div class="weaver-dropzone" id="quick-dropzone">
+          <input type="file" accept="application/pdf" multiple id="quick-input">
+          <div class="weaver-dropzone-title">Drop PDF files here, or click to choose</div>
+          <div class="weaver-dropzone-sub">Any number of files — e.g. page_1.pdf, page_2.pdf … or 001_intro.pdf, 002_body.pdf</div>
+        </div>
+        <div class="weaver-filelist" id="quick-filelist"></div>
+        <p class="weaver-filelist-note" id="quick-note" style="display:none;">Sorted by the number found in each filename. Drag a row (or use the arrows) to reorder by hand — new files you drop in afterward are added to the end. Use ✕ to remove a file.</p>
+      </div>
+
+      <div class="weaver-assemble">
+        <button class="weaver-btn" id="quick-assemble-btn" disabled>Merge in Order</button>
+        <div class="weaver-progress-track" id="quick-progress-track"><div class="weaver-progress-fill" id="quick-progress-fill"></div></div>
+        <p class="weaver-status" id="quick-status-text">Awaiting files.</p>
+        <div class="weaver-downloads">
+          <a class="weaver-download" id="quick-download-combined" download="Combined.pdf">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>
+            <span id="quick-download-combined-label">Download combined PDF</span>
+          </a>
+          <a class="weaver-download secondary" id="quick-download-individual" download="Individual_Pages.zip">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>
+            <span id="quick-download-individual-label">Download renumbered files (zip)</span>
+          </a>
+        </div>
+        <button class="weaver-reset" id="quick-reset-btn">Start over</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+
+  // ---------- shared helpers ----------
+  function naturalPageNumber(filename){
+    const matches = filename.match(/(\d+)(?!.*\d)/);
+    return matches ? parseInt(matches[1], 10) : null;
+  }
+
+  async function fileToBytes(file){
+    const buf = await file.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  async function loadZipPages(file){
+    const zip = await JSZip.loadAsync(file);
+    const entries = [];
+    zip.forEach((relPath, entry) => {
+      if(!entry.dir && /\.pdf$/i.test(relPath)) entries.push(entry);
+    });
+    entries.sort((a,b) => {
+      const na = naturalPageNumber(a.name);
+      const nb = naturalPageNumber(b.name);
+      if(na !== null && nb !== null) return na - nb;
+      return a.name.localeCompare(b.name);
+    });
+    const pages = [];
+    for(const entry of entries){
+      pages.push(await entry.async('uint8array'));
+    }
+    return pages;
+  }
+
+  async function buildCombinedPdf(sequenceBytesList){
+    const { PDFDocument } = PDFLib;
+    const outDoc = await PDFDocument.create();
+    for(const bytes of sequenceBytesList){
+      const srcDoc = await PDFDocument.load(bytes, { ignoreEncryption:true });
+      const copied = await outDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+      copied.forEach(p => outDoc.addPage(p));
+    }
+    return outDoc.save();
+  }
+
+  async function buildZipOfIndividuals(namedFiles){
+    // namedFiles: [{ name, bytes }]
+    const zip = new JSZip();
+    namedFiles.forEach(f => zip.file(f.name, f.bytes));
+    return zip.generateAsync({ type: 'blob' });
+  }
+
+  function setDownload(linkEl, blob, filename, labelEl, labelText){
+    const url = URL.createObjectURL(blob);
+    linkEl.href = url;
+    linkEl.download = filename;
+    linkEl.classList.add('show');
+    if(labelEl) labelEl.textContent = labelText;
+  }
+
+  // =====================================================
+  // TAB SWITCHING
+  // =====================================================
+  document.querySelectorAll('.weaver-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.weaver-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.weaver-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.getAttribute('data-tab')).classList.add('active');
+    });
+  });
+
+  // =====================================================
+  // STRUCTURED BIND
+  // =====================================================
+  (function(){
+    const state = { cover:null, blank:null, back:null, left:null, right:null, order:'left-first' };
+
+    const slotBoxUpdate = (slotEl, file) => {
+      const box = slotEl.querySelector('.weaver-slot-box');
+      let fileEl = box.querySelector('.weaver-slot-file');
+      let emptyEl = box.querySelector('.weaver-slot-empty');
+      if(file){
+        box.classList.add('has-file');
+        if(emptyEl) emptyEl.remove();
+        if(!fileEl){ fileEl = document.createElement('span'); fileEl.className = 'weaver-slot-file'; box.appendChild(fileEl); }
+        fileEl.textContent = file.name;
+      } else {
+        box.classList.remove('has-file');
+        if(fileEl) fileEl.remove();
+        if(!emptyEl){ emptyEl = document.createElement('span'); emptyEl.className = 'weaver-slot-empty'; emptyEl.textContent = 'Drop or choose file'; box.appendChild(emptyEl); }
+      }
+    };
+
+    document.querySelectorAll('#panel-structured .weaver-slot input[type=file]').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const slotKey = e.target.getAttribute('data-slot');
+        const file = e.target.files[0] || null;
+        state[slotKey] = file;
+        slotBoxUpdate(e.target.closest('.weaver-slot'), file);
+        updateReadiness();
+      });
+    });
+
+    document.querySelectorAll('#order-buttons .weaver-order-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#order-buttons .weaver-order-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.order = btn.getAttribute('data-order');
+      });
+    });
+
+    const assembleBtn = document.getElementById('assemble-btn');
+    const statusText = document.getElementById('status-text');
+    const progressTrack = document.getElementById('progress-track');
+    const progressFill = document.getElementById('progress-fill');
+    const downloadCombined = document.getElementById('download-combined');
+    const downloadCombinedLabel = document.getElementById('download-combined-label');
+    const downloadIndividual = document.getElementById('download-individual');
+    const downloadIndividualLabel = document.getElementById('download-individual-label');
+    const resetBtn = document.getElementById('reset-btn');
+
+    function updateReadiness(){
+      const ready = !!(state.left && state.right);
+      assembleBtn.disabled = !ready;
+      statusText.className = 'weaver-status';
+      statusText.textContent = ready ? 'Ready to bind whenever you are.' : 'Awaiting your two runs of pages.';
+      downloadCombined.classList.remove('show');
+      downloadIndividual.classList.remove('show');
+    }
+
+    function setProgress(pct){ progressTrack.classList.add('show'); progressFill.style.width = pct + '%'; }
+
+    assembleBtn.addEventListener('click', async () => {
+      assembleBtn.disabled = true;
+      resetBtn.style.visibility = 'hidden';
+      downloadCombined.classList.remove('show');
+      downloadIndividual.classList.remove('show');
+      statusText.className = 'weaver-status';
+      statusText.textContent = 'Unbinding the runs…';
+      setProgress(4);
+
+      try{
+        const [leftPages, rightPages] = await Promise.all([ loadZipPages(state.left), loadZipPages(state.right) ]);
+        if(leftPages.length === 0 || rightPages.length === 0) throw new Error('One of the runs has no PDF pages inside its .zip.');
+
+        setProgress(16);
+        statusText.textContent = 'Weaving the sequence…';
+
+        const sequence = []; // { name, bytes }
+        if(state.cover) sequence.push({ bytes: await fileToBytes(state.cover), rawLabel:'Cover' });
+        if(state.blank) sequence.push({ bytes: await fileToBytes(state.blank), rawLabel:'Blank' });
+
+        const maxLen = Math.max(leftPages.length, rightPages.length);
+        const firstIsLeft = state.order === 'left-first';
+        for(let i = 0; i < maxLen; i++){
+          const l = leftPages[i];
+          const r = rightPages[i];
+          const num = String(i+1).padStart(3,'0');
+          if(firstIsLeft){
+            if(l) sequence.push({ bytes:l, rawLabel:'Left_'+num });
+            if(r) sequence.push({ bytes:r, rawLabel:'Right_'+num });
+          } else {
+            if(r) sequence.push({ bytes:r, rawLabel:'Right_'+num });
+            if(l) sequence.push({ bytes:l, rawLabel:'Left_'+num });
+          }
+        }
+        if(state.back) sequence.push({ bytes: await fileToBytes(state.back), rawLabel:'Back' });
+
+        // assign final numbered names
+        sequence.forEach((item, idx) => { item.name = String(idx+1).padStart(3,'0') + '_' + item.rawLabel + '.pdf'; });
+
+        setProgress(30);
+        statusText.textContent = 'Binding ' + sequence.length + ' leaves…';
+
+        const combinedBytes = await buildCombinedPdf(sequence.map(s => s.bytes));
+        setProgress(75);
+        statusText.textContent = 'Preparing individual pages…';
+
+        const zipBlob = await buildZipOfIndividuals(sequence.map(s => ({ name: s.name, bytes: s.bytes })));
+        setProgress(95);
+
+        setDownload(downloadCombined, new Blob([combinedBytes], {type:'application/pdf'}), 'Combined.pdf', downloadCombinedLabel, 'Download combined tome (' + sequence.length + ' pages)');
+        setDownload(downloadIndividual, zipBlob, 'Individual_Pages.zip', downloadIndividualLabel, 'Download individual pages (zip, ' + sequence.length + ' files)');
+
+        setProgress(100);
+        statusText.className = 'weaver-status success';
+        statusText.textContent = 'Bound successfully — ' + sequence.length + ' pages, ready below.';
+      } catch(err){
+        console.error(err);
+        statusText.className = 'weaver-status error';
+        statusText.textContent = 'The binding failed: ' + err.message;
+      } finally {
+        assembleBtn.disabled = false;
+        resetBtn.style.visibility = 'visible';
+        setTimeout(() => { progressTrack.classList.remove('show'); progressFill.style.width='0%'; }, 1400);
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      Object.keys(state).forEach(k => { if(k !== 'order') state[k] = null; });
+      document.querySelectorAll('#panel-structured .weaver-slot input[type=file]').forEach(input => {
+        input.value = '';
+        slotBoxUpdate(input.closest('.weaver-slot'), null);
+      });
+      downloadCombined.classList.remove('show');
+      downloadIndividual.classList.remove('show');
+      updateReadiness();
+    });
+
+    updateReadiness();
+  })();
+
+  // =====================================================
+  // QUICK MERGE
+  // =====================================================
+  (function(){
+    let files = []; // array of File objects, in current sort order
+    let manuallyOrdered = false;
+    let draggedIndex = null;
+
+    const dropzone = document.getElementById('quick-dropzone');
+    const input = document.getElementById('quick-input');
+    const filelistEl = document.getElementById('quick-filelist');
+    const note = document.getElementById('quick-note');
+    const assembleBtn = document.getElementById('quick-assemble-btn');
+    const statusText = document.getElementById('quick-status-text');
+    const progressTrack = document.getElementById('quick-progress-track');
+    const progressFill = document.getElementById('quick-progress-fill');
+    const downloadCombined = document.getElementById('quick-download-combined');
+    const downloadCombinedLabel = document.getElementById('quick-download-combined-label');
+    const downloadIndividual = document.getElementById('quick-download-individual');
+    const downloadIndividualLabel = document.getElementById('quick-download-individual-label');
+    const resetBtn = document.getElementById('quick-reset-btn');
+
+    function sortFiles(list){
+      return [...list].sort((a,b) => {
+        const na = naturalPageNumber(a.name);
+        const nb = naturalPageNumber(b.name);
+        if(na !== null && nb !== null) return na - nb;
+        if(na !== null) return -1;
+        if(nb !== null) return 1;
+        return 0; // keep drop order for unnumbered files
+      });
+    }
+
+    function moveFile(fromIdx, toIdx){
+      if(fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= files.length || toIdx >= files.length) return;
+      const [moved] = files.splice(fromIdx, 1);
+      files.splice(toIdx, 0, moved);
+      manuallyOrdered = true;
+      renderList();
+      resetDownloads();
+    }
+
+    function renderList(){
+      filelistEl.innerHTML = '';
+      if(files.length === 0){ note.style.display = 'none'; assembleBtn.disabled = true; return; }
+      note.style.display = 'block';
+      assembleBtn.disabled = false;
+      files.forEach((f, idx) => {
+        const row = document.createElement('div');
+        row.className = 'weaver-file-row';
+        row.draggable = true;
+        row.dataset.idx = String(idx);
+        row.innerHTML = `
+          <span class="weaver-file-handle">⋮⋮</span>
+          <span class="weaver-file-order">${idx+1}</span>
+          <span class="weaver-file-name">${f.name}</span>
+          <span class="weaver-file-moves">
+            <button class="weaver-file-move" data-dir="up" data-idx="${idx}" title="Move up" ${idx===0?'disabled':''}>▲</button>
+            <button class="weaver-file-move" data-dir="down" data-idx="${idx}" title="Move down" ${idx===files.length-1?'disabled':''}>▼</button>
+          </span>
+          <button class="weaver-file-remove" data-idx="${idx}" title="Remove">✕</button>`;
+
+        row.addEventListener('dragstart', (e) => {
+          draggedIndex = idx;
+          row.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(idx));
+        });
+        row.addEventListener('dragend', () => {
+          row.classList.remove('dragging');
+          filelistEl.querySelectorAll('.weaver-file-row').forEach(r => r.classList.remove('drag-over'));
+          draggedIndex = null;
+        });
+        row.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+        row.addEventListener('drop', (e) => {
+          e.preventDefault();
+          row.classList.remove('drag-over');
+          const fromIdx = draggedIndex !== null ? draggedIndex : parseInt(e.dataTransfer.getData('text/plain'), 10);
+          moveFile(fromIdx, idx);
+        });
+
+        filelistEl.appendChild(row);
+      });
+
+      filelistEl.querySelectorAll('.weaver-file-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-idx'), 10);
+          files.splice(idx, 1);
+          renderList();
+          resetDownloads();
+        });
+      });
+
+      filelistEl.querySelectorAll('.weaver-file-move').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.getAttribute('data-idx'), 10);
+          const dir = btn.getAttribute('data-dir');
+          moveFile(idx, dir === 'up' ? idx - 1 : idx + 1);
+        });
+      });
+    }
+
+    function addFiles(newFiles){
+      const pdfFiles = Array.from(newFiles).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+      if(manuallyOrdered){
+        files = files.concat(sortFiles(pdfFiles));
+      } else {
+        files = sortFiles(files.concat(pdfFiles));
+      }
+      renderList();
+      resetDownloads();
+      statusText.className = 'weaver-status';
+      statusText.textContent = files.length ? 'Ready to merge ' + files.length + ' files.' : 'Awaiting files.';
+    }
+
+    function resetDownloads(){
+      downloadCombined.classList.remove('show');
+      downloadIndividual.classList.remove('show');
+    }
+
+    input.addEventListener('change', (e) => { addFiles(e.target.files); input.value = ''; });
+
+    ['dragenter','dragover'].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+    });
+    ['dragleave','drop'].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); });
+    });
+    dropzone.addEventListener('drop', (e) => {
+      if(e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    });
+
+    function setProgress(pct){ progressTrack.classList.add('show'); progressFill.style.width = pct + '%'; }
+
+    assembleBtn.addEventListener('click', async () => {
+      if(files.length === 0) return;
+      assembleBtn.disabled = true;
+      resetBtn.style.visibility = 'hidden';
+      resetDownloads();
+      statusText.className = 'weaver-status';
+      statusText.textContent = 'Reading files…';
+      setProgress(6);
+
+      try{
+        const named = [];
+        for(let i = 0; i < files.length; i++){
+          const bytes = await fileToBytes(files[i]);
+          named.push({ name: String(i+1).padStart(3,'0') + '_' + files[i].name.replace(/\.pdf$/i,'') + '.pdf', bytes });
+          setProgress(6 + Math.round((i/files.length) * 30));
+        }
+
+        statusText.textContent = 'Merging ' + named.length + ' files…';
+        setProgress(45);
+        const combinedBytes = await buildCombinedPdf(named.map(n => n.bytes));
+        setProgress(80);
+
+        statusText.textContent = 'Preparing individual files…';
+        const zipBlob = await buildZipOfIndividuals(named);
+        setProgress(95);
+
+        setDownload(downloadCombined, new Blob([combinedBytes], {type:'application/pdf'}), 'Combined.pdf', downloadCombinedLabel, 'Download combined PDF (' + named.length + ' files merged)');
+        setDownload(downloadIndividual, zipBlob, 'Individual_Pages.zip', downloadIndividualLabel, 'Download renumbered files (zip, ' + named.length + ')');
+
+        setProgress(100);
+        statusText.className = 'weaver-status success';
+        statusText.textContent = 'Merged successfully — ' + named.length + ' files, ready below.';
+      } catch(err){
+        console.error(err);
+        statusText.className = 'weaver-status error';
+        statusText.textContent = 'The merge failed: ' + err.message;
+      } finally {
+        assembleBtn.disabled = files.length === 0;
+        resetBtn.style.visibility = 'visible';
+        setTimeout(() => { progressTrack.classList.remove('show'); progressFill.style.width='0%'; }, 1400);
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      files = [];
+      manuallyOrdered = false;
+      renderList();
+      resetDownloads();
+      statusText.className = 'weaver-status';
+      statusText.textContent = 'Awaiting files.';
+    });
+
+    renderList();
+  })();
+
+})();
+</script>

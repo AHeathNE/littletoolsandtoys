@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Signature Press</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+  :root{
+    --paper:#e9e4d8;
+    --paper-deep:#ded7c5;
+    --card:#faf8f3;
+    --ink:#221f1a;
+    --ink-soft:#5c5646;
+    --thread:#a13d3d;
+    --thread-deep:#7e2f2f;
+    --line:#c7bfa9;
+    --green:#2f5d50;
+    --ok-bg:#eef3ea;
+    --warn-bg:#f7ece3;
+    --warn-ink:#8a4a1f;
+    --err-bg:#f8e9e6;
+    --err-ink:#8a2c1f;
+    --radius:2px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:
+      radial-gradient(var(--paper-deep) 0.6px, transparent 0.6px);
+    background-size:14px 14px;
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    min-height:100vh;
+    padding:32px 18px 60px;
+  }
+  .wrap{max-width:720px;margin:0 auto;}
+
+  header{margin-bottom:28px;}
+  .eyebrow{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--thread);
+    margin:0 0 10px;
+  }
+  h1{
+    font-family:Georgia,"Iowan Old Style","Palatino Linotype",serif;
+    font-weight:600;
+    font-size:clamp(30px,5vw,42px);
+    margin:0 0 10px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    font-size:15px;
+    line-height:1.55;
+    color:var(--ink-soft);
+    max-width:52ch;
+    margin:0;
+  }
+
+  /* hero diagram */
+  .diagram{
+    margin:26px 0 30px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px 18px 10px;
+  }
+  .diagram svg{display:block;width:100%;height:auto;}
+  .diagram .cap{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:10.5px;
+    color:var(--ink-soft);
+    letter-spacing:0.04em;
+    text-align:center;
+    margin:6px 0 4px;
+  }
+
+  section{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px 22px 24px;
+    margin-bottom:18px;
+  }
+  h2{
+    font-family:Georgia,serif;
+    font-size:15px;
+    font-weight:600;
+    margin:0 0 14px;
+    padding-bottom:10px;
+    border-bottom:1px dashed var(--line);
+  }
+
+  .drop{
+    border:1.5px dashed var(--line);
+    border-radius:var(--radius);
+    padding:26px 16px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag{
+    border-color:var(--thread);
+    background:#fdfbf7;
+  }
+  .drop input{display:none;}
+  .drop .lbl{font-size:14.5px;color:var(--ink);}
+  .drop .sub{font-size:12.5px;color:var(--ink-soft);margin-top:4px;}
+  .filename{
+    margin-top:14px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:8px 10px;
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .filename button{
+    background:none;border:none;color:var(--thread);cursor:pointer;
+    font-size:12px;font-family:inherit;text-decoration:underline;padding:0;
+  }
+
+  .field{margin-bottom:16px;}
+  .field:last-child{margin-bottom:0;}
+  label.field-label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--ink);
+    margin-bottom:6px;
+  }
+  .field-help{font-size:12px;color:var(--ink-soft);margin-top:5px;line-height:1.4;}
+
+  .stepper{
+    display:flex;align-items:center;gap:0;
+    width:fit-content;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .stepper button{
+    width:34px;height:34px;
+    background:var(--paper);
+    border:none;
+    font-size:16px;
+    cursor:pointer;
+    color:var(--ink);
+  }
+  .stepper button:hover{background:var(--paper-deep);}
+  .stepper input{
+    width:56px;height:34px;
+    text-align:center;
+    border:none;
+    border-left:1px solid var(--line);
+    border-right:1px solid var(--line);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:14px;
+    background:#fff;
+  }
+  .stepper input:focus{outline:none;}
+
+  select{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:#fff;
+    font-size:14px;
+    font-family:inherit;
+    color:var(--ink);
+  }
+
+  .checkrow{
+    display:flex;align-items:flex-start;gap:9px;
+    font-size:13.5px;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .checkrow input{margin-top:3px;}
+
+  /* ticket-style summary */
+  .ticket{
+    position:relative;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px 20px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13px;
+    line-height:1.9;
+    color:var(--ink);
+  }
+  .ticket .stamp{
+    position:absolute;
+    top:14px;right:16px;
+    font-size:10px;
+    letter-spacing:0.12em;
+    color:var(--thread);
+    border:1.5px solid var(--thread);
+    padding:3px 8px;
+    border-radius:3px;
+    transform:rotate(4deg);
+    opacity:0.85;
+    text-transform:uppercase;
+  }
+  .ticket .row{display:flex;justify-content:space-between;gap:16px;}
+  .ticket .row span:first-child{color:var(--ink-soft);}
+  .ticket .divider{border-top:1px dashed var(--line);margin:8px 0;}
+
+  .note{
+    border-radius:var(--radius);
+    padding:11px 13px;
+    font-size:13px;
+    line-height:1.5;
+    margin-top:14px;
+  }
+  .note.warn{background:var(--warn-bg);color:var(--warn-ink);}
+  .note.err{background:var(--err-bg);color:var(--err-ink);}
+  .note.ok{background:var(--ok-bg);color:#3a5230;}
+
+  .go{
+    width:100%;
+    padding:14px 16px;
+    background:var(--thread);
+    color:#fdfaf4;
+    border:none;
+    border-radius:var(--radius);
+    font-size:15px;
+    font-weight:600;
+    letter-spacing:0.01em;
+    cursor:pointer;
+    font-family:inherit;
+    transition:background .15s;
+  }
+  .go:hover:not(:disabled){background:var(--thread-deep);}
+  .go:disabled{background:var(--line);color:#8f8871;cursor:not-allowed;}
+
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:var(--ink-soft);
+    margin-top:20px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Bindery / imposition tool</p>
+    <h1>Signature Press</h1>
+    <p>Upload a print-ready PDF and get back saddle-stitch signatures imposed on 8.5&Prime;&times;11&Prime; sheets — cut down the middle, fold, and nest — every time, the same way.</p>
+  </header>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 190" xmlns="http://www.w3.org/2000/svg">
+      <!-- sheet 1: flat printed letter sheet -->
+      <rect x="20" y="20" width="150" height="150" fill="#fff" stroke="#c7bfa9" stroke-width="1.5"/>
+      <rect x="32" y="32" width="126" height="58" fill="none" stroke="#c7bfa9" stroke-width="1"/>
+      <rect x="32" y="100" width="126" height="58" fill="none" stroke="#c7bfa9" stroke-width="1"/>
+      <line x1="20" y1="95" x2="170" y2="95" stroke="#a13d3d" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="95" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#5c5646">1. Print duplex</text>
+
+      <!-- arrow -->
+      <path d="M195 95 L230 95" stroke="#5c5646" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- sheet 2: cut in half -->
+      <rect x="250" y="27" width="130" height="58" fill="#fff" stroke="#c7bfa9" stroke-width="1.5"/>
+      <rect x="250" y="105" width="130" height="58" fill="#fff" stroke="#c7bfa9" stroke-width="1.5"/>
+      <text x="315" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#5c5646">2. Cut in half</text>
+
+      <!-- arrow -->
+      <path d="M400 95 L435 95" stroke="#5c5646" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- sheet 3: folded, nested booklet -->
+      <g transform="translate(455,27)">
+        <path d="M0 0 L65 6 L65 122 L0 128 Z" fill="#fdfbf7" stroke="#c7bfa9" stroke-width="1.5"/>
+        <path d="M65 6 L130 0 L130 128 L65 122 Z" fill="#f3efe4" stroke="#c7bfa9" stroke-width="1.5"/>
+        <line x1="65" y1="6" x2="65" y2="122" stroke="#a13d3d" stroke-width="1.5"/>
+        <line x1="65" y1="6" x2="65" y2="122" stroke="#fff" stroke-width="1" stroke-dasharray="1 3"/>
+      </g>
+      <text x="520" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="#5c5646">3. Fold &amp; nest</text>
+
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#5c5646"/>
+        </marker>
+      </defs>
+    </svg>
+    <p class="cap">one 8.5×11 sheet in → one folded signature out</p>
+  </div>
+
+  <section>
+    <h2>1. Your file</h2>
+    <div class="drop" id="drop">
+      <input type="file" id="fileInput" accept="application/pdf">
+      <div class="lbl">Click to choose a PDF, or drop it here</div>
+      <div class="sub">Pages should already be in final reading order</div>
+    </div>
+    <div class="filename" id="filename">
+      <span id="filenameText"></span>
+      <button id="clearFile">remove</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Signature settings</h2>
+    <div class="field">
+      <label class="field-label">Pages per signature</label>
+      <div class="stepper">
+        <button type="button" id="dec">&minus;</button>
+        <input type="text" id="sigSize" value="8" inputmode="numeric">
+        <button type="button" id="inc">&plus;</button>
+      </div>
+      <p class="field-help">Must be a multiple of 4. Use 8 for the cleanest workflow — that's exactly one sheet of paper per signature.</p>
+    </div>
+    <div class="field">
+      <label class="field-label">Sheet size</label>
+      <select id="sheetSize">
+        <option value="letter" selected>Letter — 8.5 × 11 in</option>
+        <option value="a4">A4 — 210 × 297 mm</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="checkrow">
+        <input type="checkbox" id="padBlank" checked>
+        <span>Pad with blank pages at the end if the page count doesn't divide evenly</span>
+      </label>
+    </div>
+    <div class="field">
+      <label class="checkrow">
+        <input type="checkbox" id="showCutline" checked>
+        <span>Show dashed cut guide line</span>
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Job ticket</h2>
+    <div class="ticket" id="ticket">
+      <div class="stamp">no file yet</div>
+      <div class="row"><span>source pages</span><span id="tPages">—</span></div>
+      <div class="row"><span>blank pages added</span><span id="tPad">—</span></div>
+      <div class="divider"></div>
+      <div class="row"><span>signatures</span><span id="tSigs">—</span></div>
+      <div class="row"><span>sheets of paper</span><span id="tSheets">—</span></div>
+    </div>
+    <div id="messages"></div>
+  </section>
+
+  <button class="go" id="goBtn" disabled>Choose a PDF to begin</button>
+
+  <footer>Runs entirely in your browser — nothing is uploaded anywhere.</footer>
+</div>
+
+<script>
+const { PDFDocument } = PDFLib;
+
+const PAPER_SIZES = {
+  letter: { w: 612, h: 792, label: '8.5×11 in' },
+  a4:     { w: 595.28, h: 841.89, label: '210×297 mm' },
+};
+
+let fileBytes = null;
+let fileName = '';
+let srcMeta = null; // {pageCount, pw, ph}
+
+const dropEl = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const filenameBox = document.getElementById('filename');
+const filenameText = document.getElementById('filenameText');
+const clearFileBtn = document.getElementById('clearFile');
+const sigSizeInput = document.getElementById('sigSize');
+const decBtn = document.getElementById('dec');
+const incBtn = document.getElementById('inc');
+const sheetSizeSel = document.getElementById('sheetSize');
+const padBlankChk = document.getElementById('padBlank');
+const showCutlineChk = document.getElementById('showCutline');
+const goBtn = document.getElementById('goBtn');
+const messagesEl = document.getElementById('messages');
+const stampEl = document.querySelector('.stamp');
+
+const tPages = document.getElementById('tPages');
+const tPad = document.getElementById('tPad');
+const tSigs = document.getElementById('tSigs');
+const tSheets = document.getElementById('tSheets');
+
+dropEl.addEventListener('click', () => fileInput.click());
+dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('drag'); });
+dropEl.addEventListener('dragleave', () => dropEl.classList.remove('drag'));
+dropEl.addEventListener('drop', e => {
+  e.preventDefault();
+  dropEl.classList.remove('drag');
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+});
+clearFileBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  fileBytes = null; srcMeta = null; fileName = '';
+  fileInput.value = '';
+  filenameBox.style.display = 'none';
+  dropEl.style.display = 'block';
+  updateTicket();
+});
+
+async function handleFile(file) {
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    showMessage('err', 'That file doesn\u2019t look like a PDF.');
+    return;
+  }
+  fileName = file.name;
+  fileBytes = new Uint8Array(await file.arrayBuffer());
+  try {
+    const doc = await PDFDocument.load(fileBytes);
+    const count = doc.getPageCount();
+    const first = doc.getPage(0);
+    srcMeta = { pageCount: count, pw: first.getWidth(), ph: first.getHeight() };
+  } catch (err) {
+    showMessage('err', 'Couldn\u2019t read that PDF — it may be encrypted or corrupted.');
+    fileBytes = null; srcMeta = null;
+    return;
+  }
+  filenameText.textContent = fileName + '  ·  ' + srcMeta.pageCount + ' pages';
+  filenameBox.style.display = 'flex';
+  dropEl.style.display = 'none';
+  updateTicket();
+}
+
+function clampSigSize() {
+  let v = parseInt(sigSizeInput.value, 10);
+  if (isNaN(v) || v < 4) v = 4;
+  v = Math.round(v / 4) * 4;
+  sigSizeInput.value = v;
+}
+decBtn.addEventListener('click', () => { clampSigSize(); sigSizeInput.value = Math.max(4, parseInt(sigSizeInput.value,10) - 4); updateTicket(); });
+incBtn.addEventListener('click', () => { clampSigSize(); sigSizeInput.value = parseInt(sigSizeInput.value,10) + 4; updateTicket(); });
+sigSizeInput.addEventListener('change', () => { clampSigSize(); updateTicket(); });
+sheetSizeSel.addEventListener('change', updateTicket);
+padBlankChk.addEventListener('change', updateTicket);
+
+function showMessage(kind, text) {
+  messagesEl.innerHTML = '<div class="note ' + kind + '">' + text + '</div>';
+}
+function clearMessage() { messagesEl.innerHTML = ''; }
+
+function updateTicket() {
+  if (!srcMeta) {
+    stampEl.textContent = 'no file yet';
+    tPages.textContent = '—'; tPad.textContent = '—'; tSigs.textContent = '—'; tSheets.textContent = '—';
+    goBtn.disabled = true; goBtn.textContent = 'Choose a PDF to begin';
+    clearMessage();
+    return;
+  }
+  clampSigSize();
+  const sigSize = parseInt(sigSizeInput.value, 10);
+  const total = srcMeta.pageCount;
+  let pad = 0;
+  const remainder = total % sigSize;
+  if (remainder !== 0) pad = sigSize - remainder;
+
+  tPages.textContent = total;
+
+  if (pad > 0 && !padBlankChk.checked) {
+    tPad.textContent = '—';
+    tSigs.textContent = '—';
+    tSheets.textContent = '—';
+    stampEl.textContent = 'won\u2019t divide evenly';
+    showMessage('err', total + ' pages doesn\u2019t divide evenly into ' + sigSize + '-page signatures (' + pad + ' short). Either check \u201cpad with blank pages,\u201d or pick a different signature size.');
+    goBtn.disabled = true;
+    goBtn.textContent = 'Fix signature size to continue';
+    return;
+  }
+
+  const finalTotal = total + pad;
+  const numSigs = finalTotal / sigSize;
+  const sheetsPerSig = sigSize / 4;
+  const totalSheets = numSigs * sheetsPerSig;
+  const physicalPapers = Math.ceil(totalSheets / 2);
+
+  tPad.textContent = pad;
+  tSigs.textContent = numSigs;
+  tSheets.textContent = physicalPapers + ' (' + PAPER_SIZES[sheetSizeSel.value].label + ')';
+  stampEl.textContent = 'ready';
+
+  clearMessage();
+  if (pad > 0) {
+    showMessage('warn', 'Adding ' + pad + ' blank page' + (pad>1?'s':'') + ' at the end to complete the last signature.');
+  }
+  if (sheetsPerSig % 2 !== 0) {
+    const w = document.createElement('div');
+    w.className = 'note warn';
+    w.textContent = 'With ' + sigSize + ' pages per signature, signatures use an odd number of sheets, so paper sheets won\u2019t line up one-per-signature as neatly. 8 pages per signature avoids this.';
+    messagesEl.appendChild(w);
+  }
+
+  goBtn.disabled = false;
+  goBtn.textContent = 'Generate imposed PDF';
+}
+
+goBtn.addEventListener('click', async () => {
+  if (!fileBytes || !srcMeta) return;
+  goBtn.disabled = true;
+  const prevLabel = goBtn.textContent;
+  goBtn.textContent = 'Building…';
+  try {
+    await generate();
+    goBtn.textContent = 'Downloaded ✓';
+    setTimeout(() => { goBtn.textContent = prevLabel; goBtn.disabled = false; }, 1800);
+  } catch (err) {
+    console.error(err);
+    showMessage('err', 'Something went wrong building the PDF: ' + err.message);
+    goBtn.textContent = prevLabel;
+    goBtn.disabled = false;
+  }
+});
+
+async function generate() {
+  const sigSize = parseInt(sigSizeInput.value, 10);
+  const total = srcMeta.pageCount;
+  const remainder = total % sigSize;
+  const pad = remainder === 0 ? 0 : sigSize - remainder;
+  const finalTotal = total + pad;
+  const paper = PAPER_SIZES[sheetSizeSel.value];
+  const LETTER_W = paper.w, LETTER_H = paper.h;
+  const halfH = LETTER_H / 2;
+
+  const outDoc = await PDFDocument.create();
+
+  // Build a padded source: if pad>0, we need blank pages appended before embedding.
+  let workingBytes = fileBytes;
+  if (pad > 0) {
+    const padded = await PDFDocument.load(fileBytes);
+    for (let i = 0; i < pad; i++) {
+      padded.addPage([srcMeta.pw, srcMeta.ph]);
+    }
+    workingBytes = await padded.save();
+  }
+
+  const embeddedPages = await outDoc.embedPdf(workingBytes, Array.from({length: finalTotal}, (_, i) => i));
+
+  const pw = srcMeta.pw, ph = srcMeta.ph;
+  const sheetW = pw * 2, sheetH = ph;
+  const scale = Math.min(LETTER_W / sheetW, halfH / sheetH);
+  const scaledW = sheetW * scale, scaledH = sheetH * scale;
+  const xOffset = (LETTER_W - scaledW) / 2;
+
+  const numSigs = finalTotal / sigSize;
+  const sheets = [];
+  for (let sig = 0; sig < numSigs; sig++) {
+    const start = sig * sigSize;
+    const sheetsInSig = sigSize / 4;
+    for (let i = 1; i <= sheetsInSig; i++) {
+      const n = sigSize;
+      const frontLeftLocal = n - 2*i + 2;
+      const frontRightLocal = 2*i - 1;
+      const backLeftLocal = 2*i;
+      const backRightLocal = n - 2*i + 1;
+      sheets.push({
+        front: [embeddedPages[start + frontLeftLocal - 1], embeddedPages[start + frontRightLocal - 1]],
+        back:  [embeddedPages[start + backLeftLocal - 1], embeddedPages[start + backRightLocal - 1]],
+      });
+    }
+  }
+
+  function drawHalf(page, pair, isTop) {
+    if (!pair) return;
+    const yBase = isTop ? halfH : 0;
+    const yOffset = yBase + (halfH - scaledH) / 2;
+    page.drawPage(pair[0], { x: xOffset, y: yOffset, width: pw*scale, height: ph*scale });
+    page.drawPage(pair[1], { x: xOffset + pw*scale, y: yOffset, width: pw*scale, height: ph*scale });
+  }
+
+  function drawCutLine(page) {
+    const dash = 5, gap = 3.5;
+    let x = 0;
+    while (x < LETTER_W) {
+      page.drawLine({
+        start: { x: x, y: halfH },
+        end: { x: Math.min(x + dash, LETTER_W), y: halfH },
+        thickness: 0.75,
+        color: PDFLib.rgb(0.63, 0.24, 0.24),
+        opacity: 0.55,
+      });
+      x += dash + gap;
+    }
+  }
+
+  for (let k = 0; k < sheets.length; k += 2) {
+    const s1 = sheets[k];
+    const s2 = sheets[k+1] || null;
+
+    const frontPage = outDoc.addPage([LETTER_W, LETTER_H]);
+    drawHalf(frontPage, s1.front, true);
+    if (s2) drawHalf(frontPage, s2.front, false);
+    if (showCutlineChk.checked) drawCutLine(frontPage);
+
+    const backPage = outDoc.addPage([LETTER_W, LETTER_H]);
+    drawHalf(backPage, s1.back, true);
+    if (s2) drawHalf(backPage, s2.back, false);
+    if (showCutlineChk.checked) drawCutLine(backPage);
+  }
+
+  const outBytes = await outDoc.save();
+  const blob = new Blob([outBytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const base = fileName.replace(/\.pdf$/i, '');
+  a.href = url;
+  a.download = base + '_signatures.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+updateTicket();
+</script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  .drop-zone {
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 12px;
+    padding: 2.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .drop-zone.drag-over {
+    border-color: var(--border-accent);
+    background: var(--bg-accent);
+  }
+  .drop-zone i { font-size: 28px; color: var(--text-muted); }
+  .file-row {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) 90px 16px 90px 60px 32px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 0.5px solid var(--border);
+    font-size: 13px;
+  }
+  .file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .size-old { color: var(--text-muted); text-align: right; }
+  .size-new { color: var(--text-primary); font-weight: 500; text-align: right; }
+  .pct {
+    color: var(--text-success);
+    background: var(--bg-success);
+    border-radius: var(--radius);
+    padding: 2px 6px;
+    text-align: center;
+    font-weight: 500;
+  }
+  .icon-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: var(--radius);
+    color: var(--text-secondary); cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--surface-1); }
+</style>
+
+<h2 class="sr-only">Batch JPEG compressor: drag in images, adjust quality and max dimensions, then download each file or all as a zip.</h2>
+
+<input type="file" id="fileInput" accept="image/jpeg,image/jpg" multiple style="display:none;" />
+
+<div class="drop-zone" id="dropZone">
+  <i class="ti ti-photo-up" aria-hidden="true"></i>
+  <p style="margin: 8px 0 2px; font-size: 14px;">Drop jpg files here, or click to choose</p>
+  <p style="margin: 0; font-size: 12px; color: var(--text-muted);">Processed entirely in your browser — nothing is uploaded</p>
+</div>
+
+<div style="display: flex; gap: 24px; margin: 1.5rem 0; flex-wrap: wrap;">
+  <div style="flex: 1; min-width: 180px;">
+    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+      <label for="quality">Quality</label>
+      <span id="qualityOut" style="color: var(--text-secondary);">75%</span>
+    </div>
+    <input type="range" id="quality" min="10" max="95" step="5" value="75" style="width: 100%;" />
+  </div>
+  <div style="flex: 1; min-width: 180px;">
+    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+      <label for="maxDim">Max width/height</label>
+      <span id="maxDimOut" style="color: var(--text-secondary);">no limit</span>
+    </div>
+    <input type="range" id="maxDim" min="0" max="4000" step="200" value="0" style="width: 100%;" />
+  </div>
+</div>
+
+<div id="listWrap" style="display: none;">
+  <div class="file-row" style="font-size: 12px; color: var(--text-muted); border-top: none;">
+    <span>File</span><span style="text-align:right;">Original</span><span></span><span style="text-align:right;">New</span><span style="text-align:center;">Saved</span><span></span>
+  </div>
+  <div id="fileList"></div>
+</div>
+
+<div style="display: flex; gap: 8px; margin-top: 1.5rem;">
+  <button id="downloadAllBtn" style="display:none;"><i class="ti ti-download" aria-hidden="true" style="margin-right:6px;"></i>Download all as zip</button>
+  <button id="clearBtn" style="display:none;">Clear</button>
+</div>
+
+<script>
+const state = { files: [] };
+let idCounter = 0;
+
+const fileInput = document.getElementById('fileInput');
+const dropZone = document.getElementById('dropZone');
+const listWrap = document.getElementById('listWrap');
+const fileList = document.getElementById('fileList');
+const qualitySlider = document.getElementById('quality');
+const qualityOut = document.getElementById('qualityOut');
+const maxDimSlider = document.getElementById('maxDim');
+const maxDimOut = document.getElementById('maxDimOut');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
+const clearBtn = document.getElementById('clearBtn');
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+qualitySlider.addEventListener('input', () => {
+  qualityOut.textContent = qualitySlider.value + '%';
+  reprocessAll();
+});
+maxDimSlider.addEventListener('input', () => {
+  const v = Number(maxDimSlider.value);
+  maxDimOut.textContent = v === 0 ? 'no limit' : v + 'px';
+  reprocessAll();
+});
+
+clearBtn.addEventListener('click', () => {
+  state.files = [];
+  renderList();
+});
+
+function handleFiles(fileListRaw) {
+  const jpgs = Array.from(fileListRaw).filter(f => /jpe?g$/i.test(f.name) || f.type === 'image/jpeg');
+  jpgs.forEach(file => {
+    const entry = { id: idCounter++, file, originalSize: file.size, name: file.name, status: 'processing', compressedBlob: null, compressedSize: null };
+    state.files.push(entry);
+    processFile(entry);
+  });
+  renderList();
+}
+
+function processFile(entry) {
+  entry.status = 'processing';
+  const img = new Image();
+  const url = URL.createObjectURL(entry.file);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const maxDim = Number(maxDimSlider.value);
+    let { width, height } = img;
+    if (maxDim > 0 && (width > maxDim || height > maxDim)) {
+      const scale = maxDim / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+    const quality = Number(qualitySlider.value) / 100;
+    canvas.toBlob(blob => {
+      entry.compressedBlob = blob;
+      entry.compressedSize = blob.size;
+      entry.status = 'done';
+      renderList();
+    }, 'image/jpeg', quality);
+  };
+  img.onerror = () => {
+    entry.status = 'error';
+    renderList();
+  };
+  img.src = url;
+}
+
+function reprocessAll() {
+  state.files.forEach(entry => processFile(entry));
+  renderList();
+}
+
+function removeFile(id) {
+  state.files = state.files.filter(f => f.id !== id);
+  renderList();
+}
+
+function downloadOne(entry) {
+  if (!entry.compressedBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(entry.compressedBlob);
+  a.download = entry.name.replace(/\.(jpe?g)$/i, '-compressed.$1');
+  a.click();
+}
+
+async function downloadAll() {
+  const zip = new JSZip();
+  state.files.forEach(entry => {
+    if (entry.compressedBlob) {
+      zip.file(entry.name.replace(/\.(jpe?g)$/i, '-compressed.$1'), entry.compressedBlob);
+    }
+  });
+  const content = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(content);
+  a.download = 'compressed-jpgs.zip';
+  a.click();
+}
+downloadAllBtn.addEventListener('click', downloadAll);
+
+function renderList() {
+  const has = state.files.length > 0;
+  listWrap.style.display = has ? 'block' : 'none';
+  downloadAllBtn.style.display = has ? 'inline-flex' : 'none';
+  clearBtn.style.display = has ? 'inline-flex' : 'none';
+
+  fileList.innerHTML = '';
+  state.files.forEach(entry => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+
+    const savedPct = entry.compressedSize != null
+      ? Math.round((1 - entry.compressedSize / entry.originalSize) * 100)
+      : null;
+
+    row.innerHTML = `
+      <span class="file-name" title="${entry.name}">${entry.name}</span>
+      <span class="size-old">${formatSize(entry.originalSize)}</span>
+      <span style="text-align:center; color:var(--text-muted);"><i class="ti ti-arrow-right" aria-hidden="true" style="font-size:14px;"></i></span>
+      <span class="size-new">${entry.status === 'processing' ? '…' : entry.status === 'error' ? 'error' : formatSize(entry.compressedSize)}</span>
+      <span class="pct" style="${savedPct == null ? 'visibility:hidden;' : ''}">${savedPct != null ? (savedPct >= 0 ? '-' + savedPct + '%' : '+' + (-savedPct) + '%') : ''}</span>
+      <span></span>
+    `;
+
+    const actionCell = row.lastElementChild;
+    const dl = document.createElement('span');
+    dl.className = 'icon-btn';
+    dl.setAttribute('aria-label', 'Download ' + entry.name);
+    dl.innerHTML = '<i class="ti ti-download" aria-hidden="true" style="font-size:16px;"></i>';
+    if (entry.status === 'done') dl.addEventListener('click', () => downloadOne(entry));
+    else dl.style.opacity = '0.35';
+    actionCell.appendChild(dl);
+
+    fileList.appendChild(row);
+  });
+}
+</script>

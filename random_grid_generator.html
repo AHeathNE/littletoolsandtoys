@@ -1,0 +1,229 @@
+<h2 class="sr-only">Tool that generates a randomized grid on a page of chosen size, previews it live, and exports it as an SVG file.</h2>
+<div style="display:grid;grid-template-columns:270px 1fr;gap:1.5rem;align-items:start">
+  <div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:grid;grid-template-columns:1fr 90px;gap:8px">
+        <div>
+          <label style="font-size:13px;color:var(--text-secondary)">Page size</label>
+          <select id="pageSize" style="width:100%">
+            <option value="210,297">A4 portrait</option>
+            <option value="297,210">A4 landscape</option>
+            <option value="216,279">Letter portrait</option>
+            <option value="279,216">Letter landscape</option>
+            <option value="200,200">Square 200mm</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text-secondary)">Units</label>
+          <select id="units" style="width:100%">
+            <option value="mm">mm</option>
+            <option value="cm">cm</option>
+            <option value="in">in</option>
+            <option value="px">px</option>
+          </select>
+        </div>
+      </div>
+      <div id="customSize" style="display:none;gap:8px;grid-template-columns:1fr 1fr">
+        <div><label style="font-size:12px;color:var(--text-muted)">Width</label><input type="number" id="customW" value="210" style="width:100%"></div>
+        <div><label style="font-size:12px;color:var(--text-muted)">Height</label><input type="number" id="customH" value="297" style="width:100%"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label style="font-size:13px;color:var(--text-secondary)">Columns</label><input type="number" id="cols" value="6" min="1" max="40" style="width:100%"></div>
+        <div><label style="font-size:13px;color:var(--text-secondary)">Rows</label><input type="number" id="rows" value="8" min="1" max="40" style="width:100%"></div>
+      </div>
+      <div>
+        <label style="font-size:13px;color:var(--text-secondary)">Margins (<span id="unitLabel">mm</span>)</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+          <div><label style="font-size:11px;color:var(--text-muted)">Top</label><input type="number" id="marginTop" value="10" style="width:100%"></div>
+          <div><label style="font-size:11px;color:var(--text-muted)">Right</label><input type="number" id="marginRight" value="10" style="width:100%"></div>
+          <div><label style="font-size:11px;color:var(--text-muted)">Bottom</label><input type="number" id="marginBottom" value="10" style="width:100%"></div>
+          <div><label style="font-size:11px;color:var(--text-muted)">Left</label><input type="number" id="marginLeft" value="10" style="width:100%"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:6px;color:var(--text-muted)"><input type="checkbox" id="linkMargins" checked>Link all margins</label>
+      </div>
+      <div style="border-top:0.5px solid var(--border);margin:4px 0;padding-top:10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="varyCols">Vary column widths</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px"><input type="checkbox" id="varyRows">Vary row heights</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px"><input type="checkbox" id="varyStroke">Vary line weight</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px"><input type="checkbox" id="fillCells">Randomly fill cells</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px"><input type="checkbox" id="outlineBox" checked>Outline box around grid</label>
+      </div>
+      <div id="fillOpts" style="display:none;gap:8px;flex-direction:column">
+        <div><label style="font-size:12px;color:var(--text-muted)">Fill probability</label><input type="range" id="fillProb" min="0" max="100" value="25" style="width:100%"><span id="fillProbOut" style="font-size:12px;color:var(--text-muted)">25%</span></div>
+        <div><label style="font-size:12px;color:var(--text-muted)">Palette (comma-separated colors)</label><input type="text" id="palette" value="#378ADD,#D85A30,#1D9E75,#EF9F27" style="width:100%"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label style="font-size:12px;color:var(--text-muted)">Line color</label><input type="color" id="lineColor" value="#2c2c2a" style="width:100%"></div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted)">Background</label>
+          <input type="color" id="bgColor" value="#ffffff" style="width:100%">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px;color:var(--text-muted)"><input type="checkbox" id="transparentBg">Transparent</label>
+        </div>
+      </div>
+      <button id="randomizeBtn" style="margin-top:6px"><i class="ti ti-refresh" aria-hidden="true" style="margin-right:6px"></i>Randomize</button>
+      <button id="exportBtn"><i class="ti ti-download" aria-hidden="true" style="margin-right:6px"></i>Export SVG</button>
+    </div>
+  </div>
+  <div id="previewWrap" style="display:flex;justify-content:center;align-items:flex-start;background:var(--surface-1);border-radius:12px;padding:1rem;min-height:300px;background-image:linear-gradient(45deg,#8883 25%,transparent 25%),linear-gradient(-45deg,#8883 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#8883 75%),linear-gradient(-45deg,transparent 75%,#8883 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0px">
+    <div id="preview" style="max-width:100%"></div>
+  </div>
+</div>
+<script>
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let seed=Date.now()>>>0;
+let rand=mulberry32(seed);
+
+const UNIT_TO_MM={mm:1,cm:10,in:25.4,px:25.4/96};
+
+function weights(n,vary){
+  const w=[];
+  for(let i=0;i<n;i++) w.push(vary? 0.4+rand()*1.2 : 1);
+  const sum=w.reduce((a,b)=>a+b,0);
+  return w.map(x=>x/sum);
+}
+
+function getUnit(){return document.getElementById('units').value;}
+
+function getPageSizeMM(){
+  const sel=document.getElementById('pageSize').value;
+  if(sel==='custom'){
+    const f=UNIT_TO_MM[getUnit()];
+    return [ (parseFloat(document.getElementById('customW').value)||210)*f, (parseFloat(document.getElementById('customH').value)||297)*f ];
+  }
+  return sel.split(',').map(Number);
+}
+
+function getMarginsMM(){
+  const f=UNIT_TO_MM[getUnit()];
+  return {
+    top:(parseFloat(document.getElementById('marginTop').value)||0)*f,
+    right:(parseFloat(document.getElementById('marginRight').value)||0)*f,
+    bottom:(parseFloat(document.getElementById('marginBottom').value)||0)*f,
+    left:(parseFloat(document.getElementById('marginLeft').value)||0)*f
+  };
+}
+
+function buildSVG(){
+  const [pw,ph]=getPageSizeMM();
+  const cols=parseInt(document.getElementById('cols').value)||1;
+  const rows=parseInt(document.getElementById('rows').value)||1;
+  const m=getMarginsMM();
+  const varyCols=document.getElementById('varyCols').checked;
+  const varyRows=document.getElementById('varyRows').checked;
+  const varyStroke=document.getElementById('varyStroke').checked;
+  const fillCells=document.getElementById('fillCells').checked;
+  const outlineBox=document.getElementById('outlineBox').checked;
+  const transparentBg=document.getElementById('transparentBg').checked;
+  const fillProb=parseInt(document.getElementById('fillProb').value)/100;
+  const palette=document.getElementById('palette').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const lineColor=document.getElementById('lineColor').value;
+  const bgColor=document.getElementById('bgColor').value;
+
+  const gx0=m.left, gy0=m.top, gw=pw-m.left-m.right, gh=ph-m.top-m.bottom;
+  const colW=weights(cols,varyCols).map(f=>f*gw);
+  const rowH=weights(rows,varyRows).map(f=>f*gh);
+
+  const colX=[gx0]; for(const w of colW) colX.push(colX[colX.length-1]+w);
+  const rowY=[gy0]; for(const h of rowH) rowY.push(rowY[rowY.length-1]+h);
+
+  let cellsSVG='';
+  if(fillCells && palette.length){
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        if(rand()<fillProb){
+          const color=palette[Math.floor(rand()*palette.length)];
+          cellsSVG+=`<rect x="${colX[c].toFixed(2)}" y="${rowY[r].toFixed(2)}" width="${(colX[c+1]-colX[c]).toFixed(2)}" height="${(rowY[r+1]-rowY[r]).toFixed(2)}" fill="${color}"/>`;
+        }
+      }
+    }
+  }
+
+  let linesSVG='';
+  for(let i=0;i<=cols;i++){
+    const sw=varyStroke? (0.3+rand()*1.4).toFixed(2) : 0.6;
+    linesSVG+=`<line x1="${colX[i].toFixed(2)}" y1="${gy0.toFixed(2)}" x2="${colX[i].toFixed(2)}" y2="${(gy0+gh).toFixed(2)}" stroke="${lineColor}" stroke-width="${sw}"/>`;
+  }
+  for(let i=0;i<=rows;i++){
+    const sw=varyStroke? (0.3+rand()*1.4).toFixed(2) : 0.6;
+    linesSVG+=`<line x1="${gx0.toFixed(2)}" y1="${rowY[i].toFixed(2)}" x2="${(gx0+gw).toFixed(2)}" y2="${rowY[i].toFixed(2)}" stroke="${lineColor}" stroke-width="${sw}"/>`;
+  }
+
+  const outlineSVG = outlineBox ? `<rect x="${gx0.toFixed(2)}" y="${gy0.toFixed(2)}" width="${gw.toFixed(2)}" height="${gh.toFixed(2)}" fill="none" stroke="${lineColor}" stroke-width="1" data-role="outline"/>` : '';
+
+  const bgRect = transparentBg ? '' : `<rect x="0" y="0" width="${pw}" height="${ph}" fill="${bgColor}"/>`;
+
+  return `<svg viewBox="0 0 ${pw} ${ph}" xmlns="http://www.w3.org/2000/svg" width="${pw}mm" height="${ph}mm" role="img"><title>Randomized grid</title>${bgRect}${cellsSVG}${linesSVG}${outlineSVG}</svg>`;
+}
+
+function render(){
+  const svg=buildSVG();
+  const preview=document.getElementById('preview');
+  const [pw,ph]=getPageSizeMM();
+  const maxW=380, maxH=460;
+  const scale=Math.min(maxW/pw, maxH/ph);
+  preview.innerHTML=svg;
+  const svgEl=preview.querySelector('svg');
+  svgEl.style.width=(pw*scale)+'px';
+  svgEl.style.height=(ph*scale)+'px';
+  svgEl.style.border='0.5px solid var(--border)';
+}
+
+document.getElementById('pageSize').addEventListener('change',e=>{
+  document.getElementById('customSize').style.display = e.target.value==='custom' ? 'grid':'none';
+  render();
+});
+document.getElementById('units').addEventListener('change',e=>{
+  document.getElementById('unitLabel').textContent=e.target.value;
+  render();
+});
+document.getElementById('fillCells').addEventListener('change',e=>{
+  document.getElementById('fillOpts').style.display = e.target.checked ? 'flex':'none';
+  render();
+});
+document.getElementById('fillProb').addEventListener('input',e=>{
+  document.getElementById('fillProbOut').textContent=e.target.value+'%';
+  render();
+});
+document.getElementById('transparentBg').addEventListener('change',e=>{
+  document.getElementById('bgColor').disabled=e.target.checked;
+  render();
+});
+const marginIds=['marginTop','marginRight','marginBottom','marginLeft'];
+marginIds.forEach(id=>{
+  document.getElementById(id).addEventListener('input',e=>{
+    if(document.getElementById('linkMargins').checked){
+      marginIds.forEach(mid=>{ if(mid!==id) document.getElementById(mid).value=e.target.value; });
+    }
+    render();
+  });
+});
+document.getElementById('linkMargins').addEventListener('change',e=>{
+  if(e.target.checked){
+    const v=document.getElementById('marginTop').value;
+    marginIds.forEach(mid=>document.getElementById(mid).value=v);
+    render();
+  }
+});
+['cols','rows','customW','customH','varyCols','varyRows','varyStroke','outlineBox','palette','lineColor','bgColor'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',render);
+});
+document.getElementById('randomizeBtn').addEventListener('click',()=>{
+  seed=Math.floor(Math.random()*4294967295);
+  rand=mulberry32(seed);
+  render();
+});
+document.getElementById('exportBtn').addEventListener('click',()=>{
+  const svg=buildSVG();
+  const blob=new Blob([svg],{type:'image/svg+xml'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='grid.svg';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+render();
+</script>

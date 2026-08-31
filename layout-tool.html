@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Page Layout Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#1c1d1f;
+    --panel:#242629;
+    --panel-2:#2c2f33;
+    --line:#3a3d42;
+    --text:#e8e9eb;
+    --text-dim:#9a9da3;
+    --accent:#5b8def;
+    --accent-2:#e8a33d;
+    --danger:#d9534f;
+    --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:13px;
+    overflow:hidden;
+  }
+  #app{ display:flex; height:100vh; width:100vw; }
+
+  /* ---------- Sidebar ---------- */
+  #sidebar{
+    width:270px;
+    min-width:270px;
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    overflow-y:auto;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+  #sidebar h1{
+    font-size:15px;
+    margin:0 0 2px 0;
+    font-weight:600;
+    letter-spacing:.2px;
+  }
+  #sidebar .sub{ color:var(--text-dim); font-size:11.5px; margin-bottom:4px; }
+  .section{ display:flex; flex-direction:column; gap:8px; }
+  .section-title{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--text-dim);
+    font-weight:600;
+    margin-bottom:2px;
+  }
+  .row{ display:flex; gap:8px; align-items:center; }
+  .row > label{ flex:0 0 auto; color:var(--text-dim); font-size:12px; width:52px; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .row4{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  select, input[type=number], input[type=text]{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:6px;
+    padding:6px 8px;
+    font-size:12.5px;
+    width:100%;
+    outline:none;
+  }
+  select:focus, input:focus{ border-color:var(--accent); }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size:11px; color:var(--text-dim); }
+  .btn{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:6px;
+    padding:8px 10px;
+    font-size:12.5px;
+    cursor:pointer;
+    text-align:center;
+    transition:background .12s;
+  }
+  .btn:hover{ background:#34383d; }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#0b1220; font-weight:600; }
+  .btn.primary:hover{ filter:brightness(1.08); }
+  .btn.danger{ background:transparent; border-color:var(--danger); color:var(--danger); }
+  .btn.danger:hover{ background:rgba(217,83,79,.12); }
+  .btn.toggle.active{ background:var(--accent); border-color:var(--accent); color:#0b1220; font-weight:600; }
+  .btn-row{ display:flex; gap:8px; }
+  .btn-row .btn{ flex:1; }
+  hr.sep{ border:none; border-top:1px solid var(--line); margin:2px 0; }
+
+  #dropzone{
+    border:1.5px dashed var(--line);
+    border-radius:var(--radius);
+    padding:18px 10px;
+    text-align:center;
+    color:var(--text-dim);
+    font-size:12px;
+    cursor:pointer;
+    transition:border-color .12s, color .12s, background .12s;
+  }
+  #dropzone:hover, #dropzone.hover, #batchDropzone:hover, #batchDropzone.hover{ border-color:var(--accent); color:var(--text); background:rgba(91,141,239,.06); }
+  #batchDropzone{
+    border:1.5px dashed var(--line);
+    border-radius:var(--radius);
+    padding:16px 10px;
+    text-align:center;
+    color:var(--text-dim);
+    font-size:12px;
+    cursor:pointer;
+    transition:border-color .12s, color .12s, background .12s;
+  }
+  #fileInput, #replaceInput, #batchFileInput{ display:none; }
+
+  #layerList{ display:flex; flex-direction:column; gap:4px; max-height:160px; overflow-y:auto; }
+  .layer-item{
+    display:flex; align-items:center; gap:8px;
+    padding:6px 8px; border-radius:6px; cursor:pointer;
+    border:1px solid transparent;
+    font-size:12px;
+  }
+  .layer-item:hover{ background:var(--panel-2); }
+  .layer-item.selected{ background:rgba(91,141,239,.15); border-color:var(--accent); }
+  .layer-item img{ width:26px; height:26px; object-fit:cover; border-radius:4px; flex:0 0 auto; background:#111; }
+  .layer-item span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .empty-hint{ color:var(--text-dim); font-size:12px; padding:4px 2px; }
+
+  #selectedPanel{ display:none; flex-direction:column; gap:10px; }
+  #selectedPanel.show{ display:flex; }
+  .zoom-row{ display:flex; align-items:center; gap:8px; }
+  .zoom-row input[type=range]{ flex:1; accent-color:var(--accent); }
+  .zoom-val{ font-size:11px; color:var(--text-dim); width:40px; text-align:right; }
+  .hint{ font-size:11px; color:var(--text-dim); line-height:1.4; }
+
+  /* ---------- Canvas area ---------- */
+  #canvasArea{
+    flex:1;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:
+      linear-gradient(45deg, #232427 25%, transparent 25%),
+      linear-gradient(-45deg, #232427 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #232427 75%),
+      linear-gradient(-45deg, transparent 75%, #232427 75%);
+    background-size:22px 22px;
+    background-position:0 0, 0 11px, 11px -11px, -11px 0px;
+    background-color:#1a1b1d;
+    overflow:auto;
+  }
+  #canvasWrap{
+    position:relative;
+    box-shadow:0 12px 40px rgba(0,0,0,.55);
+  }
+  #pageCanvas{
+    display:block;
+    background:#fff;
+    cursor:default;
+  }
+  #topbar{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    display:flex; gap:8px; align-items:center;
+    background:rgba(36,38,41,.9);
+    border:1px solid var(--line);
+    padding:6px 10px;
+    border-radius:20px;
+    font-size:11.5px;
+    color:var(--text-dim);
+    backdrop-filter:blur(6px);
+    z-index:5;
+  }
+  #topbar b{ color:var(--text); font-weight:600; }
+  #zoomCtl{ display:flex; align-items:center; gap:6px; }
+  #zoomCtl button{
+    background:transparent; border:1px solid var(--line); color:var(--text);
+    width:20px; height:20px; border-radius:5px; cursor:pointer; font-size:13px; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #zoomCtl button:hover{ background:var(--panel-2); }
+
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:#44474d; border-radius:5px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="sidebar">
+    <div>
+      <h1>Page Layout</h1>
+      <div class="sub">Arrange, crop &amp; export image layouts</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Page size</div>
+      <select id="presetSelect"></select>
+      <div class="row2">
+        <div class="field">
+          <label>Width</label>
+          <input type="number" id="pageWidthInput" min="0.1" step="0.1">
+        </div>
+        <div class="field">
+          <label>Height</label>
+          <input type="number" id="pageHeightInput" min="0.1" step="0.1">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Unit</label>
+          <select id="unitSelect">
+            <option value="in">inches</option>
+            <option value="cm">centimeters</option>
+            <option value="px">pixels</option>
+          </select>
+        </div>
+        <div class="field" id="dpiField">
+          <label>DPI</label>
+          <input type="number" id="dpiInput" min="36" step="1">
+        </div>
+      </div>
+      <button class="btn" id="swapOrientationBtn">Swap width / height</button>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Margins <span style="text-transform:none;color:var(--text-dim);font-weight:400">(images snap here)</span></div>
+      <div class="row2">
+        <div class="field"><label>Top</label><input type="number" id="marginTop" min="0" step="0.05"></div>
+        <div class="field"><label>Right</label><input type="number" id="marginRight" min="0" step="0.05"></div>
+        <div class="field"><label>Bottom</label><input type="number" id="marginBottom" min="0" step="0.05"></div>
+        <div class="field"><label>Left</label><input type="number" id="marginLeft" min="0" step="0.05"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-dim);cursor:pointer;">
+        <input type="checkbox" id="linkMargins"> Link all four
+      </label>
+    </div>
+
+    <hr class="sep">
+
+    <div class="section">
+      <div class="section-title">Images</div>
+      <div id="dropzone">Click to add images<br>or drag &amp; drop them here</div>
+      <input type="file" id="fileInput" accept="image/*" multiple>
+      <input type="file" id="replaceInput" accept="image/*">
+      <div id="layerList"><div class="empty-hint">No images yet</div></div>
+    </div>
+
+    <div id="selectedPanel" class="section">
+      <hr class="sep">
+      <div class="section-title">Selected image</div>
+      <div class="zoom-row">
+        <span style="color:var(--text-dim);font-size:11px;">Zoom</span>
+        <input type="range" id="zoomSlider" min="1" max="4" step="0.01" value="1">
+        <span class="zoom-val" id="zoomVal">100%</span>
+      </div>
+      <button class="btn toggle" id="panModeBtn">Drag to reposition inside frame</button>
+      <div class="hint">Turn this on, then drag the image itself to pan around inside its frame. Turn off to move the whole frame again.</div>
+      <button class="btn toggle" id="lockAspectBtn">Lock aspect ratio</button>
+      <div class="hint">When on, resize handles keep the image's original width-to-height ratio (hold Shift while resizing for a one-time lock).</div>
+      <button class="btn toggle" id="pixelatedBtn">Pixelated (nearest neighbor)</button>
+      <div class="hint">Turns off smoothing so scaled-up pixels stay sharp and blocky instead of blurring.</div>
+      <div class="btn-row">
+        <button class="btn" id="replaceBtn">Replace image</button>
+        <button class="btn danger" id="deleteBtn">Delete</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="frontBtn">Bring to front</button>
+        <button class="btn" id="backBtn">Send to back</button>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="section">
+      <div class="section-title">Export</div>
+      <div class="row2">
+        <div class="field">
+          <label>Format</label>
+          <select id="exportFormat">
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+            <option value="pdf">PDF</option>
+          </select>
+        </div>
+        <div class="field" id="jpgQualityField">
+          <label>Quality</label>
+          <input type="number" id="jpgQuality" min="10" max="100" step="5" value="92">
+        </div>
+      </div>
+      <button class="btn primary" id="exportBtn">Export page</button>
+    </div>
+
+    <hr class="sep">
+
+    <div class="section">
+      <div class="section-title">Batch export</div>
+      <div class="hint">Keeps this exact layout and swaps in a new set of images for each output file, using each frame's position on the page (top-left to bottom-right, numbered on the canvas) as the slot order. Uses the format/quality above.</div>
+      <div id="batchDropzone">Click to add replacement images<br>or drop images / a .zip here</div>
+      <input type="file" id="batchFileInput" accept="image/*,.zip" multiple>
+      <div class="hint" id="batchStatus">No batch images loaded yet.</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-dim);cursor:pointer;">
+        <input type="checkbox" id="randomizePositions"> Randomly position each image within margins
+      </label>
+      <div class="hint">Keeps each frame's size, but gives it a new random spot inside the margins on every generated file, instead of reusing this layout's exact positions.</div>
+      <button class="btn primary" id="batchGenerateBtn" disabled>Generate &amp; download ZIP</button>
+    </div>
+
+  </div>
+
+  <div id="canvasArea">
+    <div id="topbar">
+      <span id="pageInfo"><b>—</b></span>
+      <div id="zoomCtl">
+        <button id="viewZoomOut">–</button>
+        <span id="viewZoomLabel">100%</span>
+        <button id="viewZoomIn">+</button>
+      </div>
+    </div>
+    <div id="canvasWrap">
+      <canvas id="pageCanvas"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= State ================= */
+  const state = {
+    unit: 'in',
+    dpi: 300,
+    widthVal: 8.5,
+    heightVal: 11,
+    pageW: 2550,   // px, derived
+    pageH: 3300,
+    marginVal: { top:0.5, right:0.5, bottom:0.5, left:0.5 },
+    marginPx: { top:150, right:150, bottom:150, left:150 },
+    images: [],    // {id,img,naturalW,naturalH,x,y,w,h,zoom,panX,panY}
+    selectedId: null,
+    panModeActive: false,
+    nextId: 1,
+    viewScale: 1   // css-px per page-px for on-screen display
+  };
+
+  const PRESETS = {
+    letter:  { label:'Letter (8.5×11 in)',        w:8.5,  h:11,   unit:'in', dpi:300 },
+    a4:      { label:'A4 (210×297 mm)',            w:8.27, h:11.69,unit:'in', dpi:300 },
+    a3:      { label:'A3 (297×420 mm)',            w:11.69,h:16.54,unit:'in', dpi:300 },
+    square12:{ label:'Square 12×12 in',            w:12,   h:12,   unit:'in', dpi:300 },
+    five7:   { label:'Photo 5×7 in',               w:5,    h:7,    unit:'in', dpi:300 },
+    four6:   { label:'Photo 4×6 in',               w:4,    h:6,    unit:'in', dpi:300 },
+    igpost:  { label:'Instagram Post (1080×1080px)',w:1080,h:1080, unit:'px', dpi:72 },
+    igstory: { label:'Instagram Story (1080×1920px)',w:1080,h:1920,unit:'px', dpi:72 },
+    custom:  { label:'Custom', w:8.5, h:11, unit:'in', dpi:300 }
+  };
+
+  /* ================= DOM refs ================= */
+  const $ = id => document.getElementById(id);
+  const canvas = $('pageCanvas');
+  const ctx = canvas.getContext('2d');
+  const canvasWrap = $('canvasWrap');
+  const canvasArea = $('canvasArea');
+
+  const presetSelect = $('presetSelect');
+  const pageWidthInput = $('pageWidthInput');
+  const pageHeightInput = $('pageHeightInput');
+  const unitSelect = $('unitSelect');
+  const dpiInput = $('dpiInput');
+  const dpiField = $('dpiField');
+  const marginTop = $('marginTop'), marginRight = $('marginRight'), marginBottom = $('marginBottom'), marginLeft = $('marginLeft');
+  const linkMargins = $('linkMargins');
+
+  const dropzone = $('dropzone');
+  const fileInput = $('fileInput');
+  const replaceInput = $('replaceInput');
+  const layerList = $('layerList');
+
+  const selectedPanel = $('selectedPanel');
+  const zoomSlider = $('zoomSlider');
+  const zoomVal = $('zoomVal');
+  const panModeBtn = $('panModeBtn');
+  const lockAspectBtn = $('lockAspectBtn');
+  const pixelatedBtn = $('pixelatedBtn');
+  const replaceBtn = $('replaceBtn');
+  const deleteBtn = $('deleteBtn');
+  const frontBtn = $('frontBtn');
+  const backBtn = $('backBtn');
+
+  const exportFormat = $('exportFormat');
+  const jpgQualityField = $('jpgQualityField');
+  const jpgQuality = $('jpgQuality');
+  const exportBtn = $('exportBtn');
+
+  const batchDropzone = $('batchDropzone');
+  const batchFileInput = $('batchFileInput');
+  const batchStatus = $('batchStatus');
+  const batchGenerateBtn = $('batchGenerateBtn');
+  const randomizePositions = $('randomizePositions');
+
+  const pageInfo = $('pageInfo');
+  const viewZoomLabel = $('viewZoomLabel');
+
+  /* ================= Unit helpers ================= */
+  function toPx(value, unit, dpi){
+    if(unit === 'px') return value;
+    if(unit === 'in') return value * dpi;
+    if(unit === 'cm') return (value/2.54) * dpi;
+    return value;
+  }
+  function fromPx(px, unit, dpi){
+    if(unit === 'px') return px;
+    if(unit === 'in') return px/dpi;
+    if(unit === 'cm') return (px/dpi)*2.54;
+    return px;
+  }
+  function round(v,d){ const m=Math.pow(10,d||2); return Math.round(v*m)/m; }
+
+  /* ================= Populate preset dropdown ================= */
+  Object.keys(PRESETS).forEach(key=>{
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = PRESETS[key].label;
+    presetSelect.appendChild(opt);
+  });
+  presetSelect.value = 'letter';
+
+  function applyPreset(key){
+    const p = PRESETS[key];
+    state.unit = p.unit;
+    state.dpi = p.dpi;
+    state.widthVal = p.w;
+    state.heightVal = p.h;
+    // sensible default margins per preset type
+    if(p.unit === 'px'){
+      state.marginVal = { top:40, right:40, bottom:40, left:40 };
+    } else {
+      state.marginVal = { top:0.5, right:0.5, bottom:0.5, left:0.5 };
+    }
+    syncInputsFromState();
+    recomputePagePx();
+    recomputeMarginPx();
+    fitViewToWindow();
+    render();
+  }
+
+  function syncInputsFromState(){
+    unitSelect.value = state.unit;
+    dpiInput.value = state.dpi;
+    dpiField.style.display = state.unit === 'px' ? 'none' : 'flex';
+    pageWidthInput.value = round(state.widthVal, 3);
+    pageHeightInput.value = round(state.heightVal, 3);
+    marginTop.value = round(state.marginVal.top,3);
+    marginRight.value = round(state.marginVal.right,3);
+    marginBottom.value = round(state.marginVal.bottom,3);
+    marginLeft.value = round(state.marginVal.left,3);
+  }
+
+  function recomputePagePx(){
+    state.pageW = Math.max(10, Math.round(toPx(state.widthVal, state.unit, state.dpi)));
+    state.pageH = Math.max(10, Math.round(toPx(state.heightVal, state.unit, state.dpi)));
+    canvas.width = state.pageW;
+    canvas.height = state.pageH;
+    pageInfo.innerHTML = '<b>' + state.pageW + ' × ' + state.pageH + ' px</b>';
+  }
+  function recomputeMarginPx(){
+    state.marginPx = {
+      top: toPx(state.marginVal.top, state.unit, state.dpi),
+      right: toPx(state.marginVal.right, state.unit, state.dpi),
+      bottom: toPx(state.marginVal.bottom, state.unit, state.dpi),
+      left: toPx(state.marginVal.left, state.unit, state.dpi)
+    };
+  }
+
+  presetSelect.addEventListener('change', ()=> applyPreset(presetSelect.value));
+
+  function markCustom(){ presetSelect.value = 'custom'; }
+
+  pageWidthInput.addEventListener('input', ()=>{
+    state.widthVal = parseFloat(pageWidthInput.value)||state.widthVal;
+    markCustom(); recomputePagePx(); applyViewScale(); render();
+  });
+  pageHeightInput.addEventListener('input', ()=>{
+    state.heightVal = parseFloat(pageHeightInput.value)||state.heightVal;
+    markCustom(); recomputePagePx(); applyViewScale(); render();
+  });
+  unitSelect.addEventListener('change', ()=>{
+    // convert current width/height/margins numerically to keep real size roughly consistent
+    const oldUnit = state.unit, oldDpi = state.dpi;
+    const newUnit = unitSelect.value;
+    const wPx = toPx(state.widthVal, oldUnit, oldDpi);
+    const hPx = toPx(state.heightVal, oldUnit, oldDpi);
+    const mPx = state.marginPx;
+    state.unit = newUnit;
+    dpiField.style.display = newUnit === 'px' ? 'none' : 'flex';
+    state.widthVal = round(fromPx(wPx, newUnit, state.dpi),3);
+    state.heightVal = round(fromPx(hPx, newUnit, state.dpi),3);
+    state.marginVal = {
+      top: round(fromPx(mPx.top, newUnit, state.dpi),3),
+      right: round(fromPx(mPx.right, newUnit, state.dpi),3),
+      bottom: round(fromPx(mPx.bottom, newUnit, state.dpi),3),
+      left: round(fromPx(mPx.left, newUnit, state.dpi),3)
+    };
+    markCustom();
+    syncInputsFromState();
+    recomputePagePx(); recomputeMarginPx(); applyViewScale(); render();
+  });
+  dpiInput.addEventListener('input', ()=>{
+    state.dpi = parseFloat(dpiInput.value)||state.dpi;
+    markCustom(); recomputePagePx(); recomputeMarginPx(); applyViewScale(); render();
+  });
+  $('swapOrientationBtn').addEventListener('click', ()=>{
+    const w = state.widthVal; state.widthVal = state.heightVal; state.heightVal = w;
+    markCustom(); syncInputsFromState(); recomputePagePx(); fitViewToWindow(); render();
+  });
+
+  function marginInputHandler(which, el){
+    return ()=>{
+      const v = parseFloat(el.value)||0;
+      if(linkMargins.checked){
+        state.marginVal = { top:v, right:v, bottom:v, left:v };
+        syncInputsFromState();
+      } else {
+        state.marginVal[which] = v;
+      }
+      recomputeMarginPx(); render();
+    };
+  }
+  marginTop.addEventListener('input', marginInputHandler('top', marginTop));
+  marginRight.addEventListener('input', marginInputHandler('right', marginRight));
+  marginBottom.addEventListener('input', marginInputHandler('bottom', marginBottom));
+  marginLeft.addEventListener('input', marginInputHandler('left', marginLeft));
+
+  /* ================= View (screen) zoom / fit ================= */
+  function fitViewToWindow(){
+    const availW = canvasArea.clientWidth - 60;
+    const availH = canvasArea.clientHeight - 60;
+    const scale = Math.min(availW/state.pageW, availH/state.pageH, 1.5);
+    state.viewScale = Math.max(0.02, scale);
+    applyViewScale();
+  }
+  function applyViewScale(){
+    canvas.style.width = (state.pageW*state.viewScale)+'px';
+    canvas.style.height = (state.pageH*state.viewScale)+'px';
+    viewZoomLabel.textContent = Math.round(state.viewScale*100)+'%';
+  }
+  $('viewZoomIn').addEventListener('click', ()=>{ state.viewScale=Math.min(4,state.viewScale*1.2); applyViewScale(); });
+  $('viewZoomOut').addEventListener('click', ()=>{ state.viewScale=Math.max(0.05,state.viewScale/1.2); applyViewScale(); });
+  window.addEventListener('resize', ()=>{ fitViewToWindow(); render(); });
+
+  /* ================= Image loading ================= */
+  function readFiles(files, onEach){
+    Array.from(files).forEach(file=>{
+      if(!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = e=>{
+        const img = new Image();
+        img.onload = ()=> onEach(img);
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function addImage(img, index){
+    const contentW = state.pageW - state.marginPx.left - state.marginPx.right;
+    const contentH = state.pageH - state.marginPx.top - state.marginPx.bottom;
+    const targetLong = Math.max(60, Math.min(contentW, contentH) * 0.45);
+    const scale = targetLong / Math.max(img.naturalWidth, img.naturalHeight);
+    const w = Math.max(30, img.naturalWidth*scale);
+    const h = Math.max(30, img.naturalHeight*scale);
+    const cascade = (index%6) * 26;
+    let x = state.marginPx.left + (contentW-w)/2 + cascade;
+    let y = state.marginPx.top + (contentH-h)/2 + cascade;
+    // clamp inside content area
+    x = Math.min(Math.max(x, state.marginPx.left), state.pageW-state.marginPx.right-w);
+    y = Math.min(Math.max(y, state.marginPx.top), state.pageH-state.marginPx.bottom-h);
+    const obj = {
+      id: state.nextId++,
+      img, naturalW: img.naturalWidth, naturalH: img.naturalHeight,
+      x, y, w, h, zoom:1, panX:0, panY:0, lockAspect:false, pixelated:false
+    };
+    state.images.push(obj);
+    return obj;
+  }
+
+  function handleNewFiles(files){
+    let i = 0;
+    readFiles(files, img=>{
+      const obj = addImage(img, state.images.length + i);
+      i++;
+      selectImage(obj.id);
+      refreshLayerList();
+      render();
+    });
+  }
+
+  dropzone.addEventListener('click', ()=> fileInput.click());
+  fileInput.addEventListener('change', e=>{ handleNewFiles(e.target.files); fileInput.value=''; });
+  ['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.add('hover'); }));
+  ['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.remove('hover'); }));
+  dropzone.addEventListener('drop', e=>{ handleNewFiles(e.dataTransfer.files); });
+
+  // drag & drop directly on the canvas / canvas area
+  ['dragenter','dragover'].forEach(ev=> canvasArea.addEventListener(ev, e=> e.preventDefault()));
+  canvasArea.addEventListener('drop', e=>{
+    e.preventDefault();
+    if(e.dataTransfer.files && e.dataTransfer.files.length) handleNewFiles(e.dataTransfer.files);
+  });
+
+  /* ================= Layer list UI ================= */
+  function refreshLayerList(){
+    layerList.innerHTML = '';
+    if(state.images.length === 0){
+      layerList.innerHTML = '<div class="empty-hint">No images yet</div>';
+      updateBatchStatus();
+      return;
+    }
+    for(let i=state.images.length-1;i>=0;i--){
+      const obj = state.images[i];
+      const item = document.createElement('div');
+      item.className = 'layer-item' + (obj.id===state.selectedId?' selected':'');
+      const thumb = document.createElement('img');
+      thumb.src = obj.img.src;
+      const span = document.createElement('span');
+      span.textContent = 'Image ' + obj.id;
+      item.appendChild(thumb);
+      item.appendChild(span);
+      item.addEventListener('click', ()=>{ selectImage(obj.id); render(); });
+      layerList.appendChild(item);
+    }
+    updateBatchStatus();
+  }
+
+  /* ================= Selection ================= */
+  function getSelected(){ return state.images.find(o=>o.id===state.selectedId) || null; }
+  function selectImage(id){
+    state.selectedId = id;
+    state.panModeActive = false;
+    panModeBtn.classList.remove('active');
+    panModeBtn.textContent = 'Drag to reposition inside frame';
+    const obj = getSelected();
+    if(obj){
+      selectedPanel.classList.add('show');
+      zoomSlider.value = obj.zoom;
+      zoomVal.textContent = Math.round(obj.zoom*100)+'%';
+      lockAspectBtn.classList.toggle('active', !!obj.lockAspect);
+      pixelatedBtn.classList.toggle('active', !!obj.pixelated);
+    } else {
+      selectedPanel.classList.remove('show');
+    }
+    refreshLayerList();
+  }
+  function deselect(){ state.selectedId=null; selectedPanel.classList.remove('show'); state.panModeActive=false; refreshLayerList(); }
+
+  zoomSlider.addEventListener('input', ()=>{
+    const obj = getSelected(); if(!obj) return;
+    obj.zoom = parseFloat(zoomSlider.value);
+    zoomVal.textContent = Math.round(obj.zoom*100)+'%';
+    clampPan(obj);
+    render();
+  });
+
+  panModeBtn.addEventListener('click', ()=>{
+    state.panModeActive = !state.panModeActive;
+    panModeBtn.classList.toggle('active', state.panModeActive);
+    panModeBtn.textContent = state.panModeActive ? 'Now drag the image to pan (click to stop)' : 'Drag to reposition inside frame';
+  });
+
+  lockAspectBtn.addEventListener('click', ()=>{
+    const obj = getSelected(); if(!obj) return;
+    obj.lockAspect = !obj.lockAspect;
+    lockAspectBtn.classList.toggle('active', obj.lockAspect);
+  });
+
+  pixelatedBtn.addEventListener('click', ()=>{
+    const obj = getSelected(); if(!obj) return;
+    obj.pixelated = !obj.pixelated;
+    pixelatedBtn.classList.toggle('active', obj.pixelated);
+    render();
+  });
+
+  deleteBtn.addEventListener('click', ()=>{
+    const obj = getSelected(); if(!obj) return;
+    state.images = state.images.filter(o=>o.id!==obj.id);
+    deselect(); refreshLayerList(); render();
+  });
+  frontBtn.addEventListener('click', ()=>{
+    const obj = getSelected(); if(!obj) return;
+    state.images = state.images.filter(o=>o.id!==obj.id);
+    state.images.push(obj); refreshLayerList(); render();
+  });
+  backBtn.addEventListener('click', ()=>{
+    const obj = getSelected(); if(!obj) return;
+    state.images = state.images.filter(o=>o.id!==obj.id);
+    state.images.unshift(obj); refreshLayerList(); render();
+  });
+
+  replaceBtn.addEventListener('click', ()=>{
+    if(!getSelected()) return;
+    replaceInput.click();
+  });
+  replaceInput.addEventListener('change', e=>{
+    const file = e.target.files[0];
+    const obj = getSelected();
+    if(!file || !obj) { replaceInput.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      const img = new Image();
+      img.onload = ()=>{
+        // keep obj.x,y,w,h identical -> frame size/position preserved
+        obj.img = img;
+        obj.naturalW = img.naturalWidth;
+        obj.naturalH = img.naturalHeight;
+        obj.zoom = 1; obj.panX = 0; obj.panY = 0;
+        refreshLayerList(); render();
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    replaceInput.value = '';
+  });
+
+  /* ================= Geometry / rendering ================= */
+  function frameDraw(obj){
+    // "cover" style crop with zoom + pan, returns {destX,destY,destW,destH} for full (unclipped) image draw
+    const coverScale = Math.max(obj.w/obj.naturalW, obj.h/obj.naturalH);
+    const scale = coverScale * obj.zoom;
+    const drawW = obj.naturalW*scale;
+    const drawH = obj.naturalH*scale;
+    const leftoverX = Math.max(0, drawW - obj.w);
+    const leftoverY = Math.max(0, drawH - obj.h);
+    const destX = obj.x - leftoverX/2 + obj.panX*(leftoverX/2);
+    const destY = obj.y - leftoverY/2 + obj.panY*(leftoverY/2);
+    return { destX, destY, destW:drawW, destH:drawH };
+  }
+  function clampPan(obj){
+    obj.panX = Math.max(-1, Math.min(1, obj.panX));
+    obj.panY = Math.max(-1, Math.min(1, obj.panY));
+  }
+
+  function readingOrderFrames(){
+    // top-left to bottom-right: row by row (y), then across (x)
+    return state.images.slice().sort((a,b)=> (a.y-b.y) || (a.x-b.x));
+  }
+
+  let guideLinesToDraw = [];
+
+  function render(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // images
+    state.images.forEach(obj=>{
+      const d = frameDraw(obj);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(obj.x, obj.y, obj.w, obj.h);
+      ctx.clip();
+      ctx.imageSmoothingEnabled = !obj.pixelated;
+      ctx.drawImage(obj.img, d.destX, d.destY, d.destW, d.destH);
+      ctx.restore();
+    });
+
+    // reading-order badges (editor view only, helps line up batch export slots)
+    if(state.images.length > 1){
+      const ranks = new Map();
+      readingOrderFrames().forEach((o,i)=> ranks.set(o.id, i+1));
+      const r = Math.max(11, state.pageW/150);
+      ctx.save();
+      state.images.forEach(obj=>{
+        const cx = obj.x + r + 5, cy = obj.y + r + 5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(20,20,22,0.75)';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = (r*1.15)+'px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(ranks.get(obj.id)), cx, cy+1);
+      });
+      ctx.restore();
+    }
+
+    // margin guides (only in editor view, thin dashed)
+    const lw = Math.max(1, state.pageW/900);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(91,141,239,0.55)';
+    ctx.setLineDash([state.pageW/220, state.pageW/220]);
+    ctx.lineWidth = lw;
+    const mL = state.marginPx.left, mR = state.pageW-state.marginPx.right;
+    const mT = state.marginPx.top, mB = state.pageH-state.marginPx.bottom;
+    ctx.beginPath();
+    ctx.moveTo(mL,0); ctx.lineTo(mL,state.pageH);
+    ctx.moveTo(mR,0); ctx.lineTo(mR,state.pageH);
+    ctx.moveTo(0,mT); ctx.lineTo(state.pageW,mT);
+    ctx.moveTo(0,mB); ctx.lineTo(state.pageW,mB);
+    ctx.stroke();
+    ctx.restore();
+
+    // active snap guides (drawn during drag)
+    if(guideLinesToDraw.length){
+      ctx.save();
+      ctx.strokeStyle = 'rgba(232,163,61,0.95)';
+      ctx.setLineDash([]);
+      ctx.lineWidth = lw*1.3;
+      guideLinesToDraw.forEach(g=>{
+        ctx.beginPath();
+        if(g.type==='v'){ ctx.moveTo(g.pos,0); ctx.lineTo(g.pos,state.pageH); }
+        else { ctx.moveTo(0,g.pos); ctx.lineTo(state.pageW,g.pos); }
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    // selection outline + handles
+    const sel = getSelected();
+    if(sel){
+      ctx.save();
+      ctx.strokeStyle = '#5b8def';
+      ctx.lineWidth = lw*1.5;
+      ctx.setLineDash([]);
+      ctx.strokeRect(sel.x, sel.y, sel.w, sel.h);
+      const hs = Math.max(8, state.pageW/140); // handle size in page px
+      ctx.fillStyle = '#5b8def';
+      handlePositions(sel).forEach(hp=>{
+        ctx.fillRect(hp.px-hs/2, hp.py-hs/2, hs, hs);
+      });
+      ctx.restore();
+    }
+  }
+
+  function handlePositions(obj){
+    const {x,y,w,h} = obj;
+    return [
+      {name:'nw', px:x,     py:y},
+      {name:'n',  px:x+w/2, py:y},
+      {name:'ne', px:x+w,   py:y},
+      {name:'e',  px:x+w,   py:y+h/2},
+      {name:'se', px:x+w,   py:y+h},
+      {name:'s',  px:x+w/2, py:y+h},
+      {name:'sw', px:x,     py:y+h},
+      {name:'w',  px:x,     py:y+h/2}
+    ];
+  }
+  const CURSOR_FOR = { nw:'nwse-resize', n:'ns-resize', ne:'nesw-resize', e:'ew-resize', se:'nwse-resize', s:'ns-resize', sw:'nesw-resize', w:'ew-resize' };
+
+  /* ================= Mouse interaction ================= */
+  function pagePosFromEvent(e){
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width/rect.width;
+    const scaleY = canvas.height/rect.height;
+    return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
+  }
+
+  function hitHandle(sel, pos){
+    if(!sel) return null;
+    const hs = Math.max(8, state.pageW/140) * 1.4; // slightly generous hit area
+    for(const hp of handlePositions(sel)){
+      if(Math.abs(pos.x-hp.px) <= hs/2 && Math.abs(pos.y-hp.py) <= hs/2) return hp.name;
+    }
+    return null;
+  }
+  function hitImage(pos){
+    for(let i=state.images.length-1;i>=0;i--){
+      const o = state.images[i];
+      if(pos.x>=o.x && pos.x<=o.x+o.w && pos.y>=o.y && pos.y<=o.y+o.h) return o;
+    }
+    return null;
+  }
+
+  function getGuides(excludeId){
+    const v = [0, state.pageW, state.pageW/2, state.marginPx.left, state.pageW-state.marginPx.right];
+    const h = [0, state.pageH, state.pageH/2, state.marginPx.top, state.pageH-state.marginPx.bottom];
+    state.images.forEach(o=>{
+      if(o.id===excludeId) return;
+      v.push(o.x, o.x+o.w, o.x+o.w/2);
+      h.push(o.y, o.y+o.h, o.y+o.h/2);
+    });
+    return {v,h};
+  }
+  function snapScalarSet(values, guides, tol){
+    // values: array of {val, tag} candidate edges/center to test; returns {offset, usedGuide} best match (smallest diff) or null
+    let best = null;
+    values.forEach(v=>{
+      guides.forEach(g=>{
+        const diff = Math.abs(v.val-g);
+        if(diff<=tol && (!best || diff<best.diff)) best = {diff, offset:g-v.val, guide:g};
+      });
+    });
+    return best;
+  }
+
+  let drag = null; // {mode, obj, startPos, orig, handle}
+
+  canvas.addEventListener('mousedown', e=>{
+    const pos = pagePosFromEvent(e);
+    const sel = getSelected();
+
+    if(sel && !state.panModeActive){
+      const h = hitHandle(sel, pos);
+      if(h){
+        drag = { mode:'resize', obj:sel, handle:h, startPos:pos, orig:{x:sel.x,y:sel.y,w:sel.w,h:sel.h} };
+        return;
+      }
+    }
+
+    if(sel && state.panModeActive){
+      const hitSel = pos.x>=sel.x && pos.x<=sel.x+sel.w && pos.y>=sel.y && pos.y<=sel.y+sel.h;
+      if(hitSel){
+        drag = { mode:'pan', obj:sel, startPos:pos, orig:{panX:sel.panX,panY:sel.panY} };
+        return;
+      }
+    }
+
+    const target = hitImage(pos);
+    if(target){
+      selectImage(target.id);
+      drag = { mode:'move', obj:target, startPos:pos, orig:{x:target.x,y:target.y} };
+      render();
+      return;
+    }
+    deselect();
+    render();
+  });
+
+  window.addEventListener('mousemove', e=>{
+    if(!drag){
+      // hover cursor feedback
+      const sel = getSelected();
+      if(sel && !state.panModeActive){
+        const pos = pagePosFromEvent(e);
+        const h = hitHandle(sel, pos);
+        canvas.style.cursor = h ? CURSOR_FOR[h] : (hitImage(pos) ? 'move' : 'default');
+      }
+      return;
+    }
+    const pos = pagePosFromEvent(e);
+    const dx = pos.x - drag.startPos.x;
+    const dy = pos.y - drag.startPos.y;
+    const tol = 10 / state.viewScale; // ~10 screen px tolerance regardless of zoom
+    guideLinesToDraw = [];
+
+    if(drag.mode === 'move'){
+      const o = drag.obj;
+      let nx = drag.orig.x + dx;
+      let ny = drag.orig.y + dy;
+      const guides = getGuides(o.id);
+      const vCandidates = [{val:nx, tag:'l'},{val:nx+o.w, tag:'r'},{val:nx+o.w/2, tag:'c'}];
+      const hCandidates = [{val:ny, tag:'t'},{val:ny+o.h, tag:'b'},{val:ny+o.h/2, tag:'c'}];
+      const bestV = snapScalarSet(vCandidates, guides.v, tol);
+      const bestH = snapScalarSet(hCandidates, guides.h, tol);
+      if(bestV){ nx += bestV.offset; guideLinesToDraw.push({type:'v', pos:bestV.guide}); }
+      if(bestH){ ny += bestH.offset; guideLinesToDraw.push({type:'h', pos:bestH.guide}); }
+      o.x = nx; o.y = ny;
+    }
+    else if(drag.mode === 'resize'){
+      const o = drag.obj;
+      let {x,y,w,h} = drag.orig;
+      const hname = drag.handle;
+      const MIN = 20;
+      const locked = !!o.lockAspect || e.shiftKey;
+
+      if(locked){
+        const aspect = o.naturalW / o.naturalH;
+        const mouseX = drag.startPos.x + dx, mouseY = drag.startPos.y + dy;
+        let nx, ny, nw, nh;
+
+        if(hname==='nw' || hname==='ne' || hname==='se' || hname==='sw'){
+          // anchor = the fixed opposite corner
+          const anchor = {
+            nw:{x:x+w, y:y+h}, ne:{x:x, y:y+h},
+            se:{x:x, y:y},     sw:{x:x+w, y:y}
+          }[hname];
+          const rawW = Math.abs(mouseX - anchor.x);
+          const rawH = Math.abs(mouseY - anchor.y);
+          // pick whichever axis moved proportionally more, then derive the other from aspect
+          nw = Math.max(MIN, Math.max(rawW, rawH*aspect));
+          nh = nw / aspect;
+          if(nh < MIN){ nh = MIN; nw = nh*aspect; }
+          nx = (hname==='nw' || hname==='sw') ? anchor.x - nw : anchor.x;
+          ny = (hname==='nw' || hname==='ne') ? anchor.y - nh : anchor.y;
+        } else if(hname==='e' || hname==='w'){
+          const cy = y + h/2;
+          const anchorX = hname==='e' ? x : x+w;
+          nw = Math.max(MIN, Math.abs(mouseX - anchorX));
+          nh = nw / aspect;
+          nx = hname==='e' ? anchorX : anchorX - nw;
+          ny = cy - nh/2;
+        } else { // 'n' or 's'
+          const cx = x + w/2;
+          const anchorY = hname==='s' ? y : y+h;
+          nh = Math.max(MIN, Math.abs(mouseY - anchorY));
+          nw = nh * aspect;
+          ny = hname==='s' ? anchorY : anchorY - nh;
+          nx = cx - nw/2;
+        }
+        o.x=nx; o.y=ny; o.w=nw; o.h=nh;
+      } else {
+        let nx=x, ny=y, nw=w, nh=h;
+        if(hname.includes('e')) nw = w+dx;
+        if(hname.includes('s')) nh = h+dy;
+        if(hname.includes('w')){ nx = x+dx; nw = w-dx; }
+        if(hname.includes('n')){ ny = y+dy; nh = h-dy; }
+
+        const guides = getGuides(o.id);
+        if(hname.includes('e')){
+          const best = snapScalarSet([{val:nx+nw}], guides.v, tol);
+          if(best){ nw += best.offset; guideLinesToDraw.push({type:'v', pos:best.guide}); }
+        }
+        if(hname.includes('w')){
+          const best = snapScalarSet([{val:nx}], guides.v, tol);
+          if(best){ nx += best.offset; nw -= best.offset; guideLinesToDraw.push({type:'v', pos:best.guide}); }
+        }
+        if(hname.includes('s')){
+          const best = snapScalarSet([{val:ny+nh}], guides.h, tol);
+          if(best){ nh += best.offset; guideLinesToDraw.push({type:'h', pos:best.guide}); }
+        }
+        if(hname.includes('n')){
+          const best = snapScalarSet([{val:ny}], guides.h, tol);
+          if(best){ ny += best.offset; nh -= best.offset; guideLinesToDraw.push({type:'h', pos:best.guide}); }
+        }
+        if(nw < MIN){ nw = MIN; if(hname.includes('w')) nx = x+w-MIN; }
+        if(nh < MIN){ nh = MIN; if(hname.includes('n')) ny = y+h-MIN; }
+        o.x=nx; o.y=ny; o.w=nw; o.h=nh;
+      }
+      clampPan(o);
+    }
+    else if(drag.mode === 'pan'){
+      const o = drag.obj;
+      const coverScale = Math.max(o.w/o.naturalW, o.h/o.naturalH) * o.zoom;
+      const leftoverX = Math.max(0, o.naturalW*coverScale - o.w);
+      const leftoverY = Math.max(0, o.naturalH*coverScale - o.h);
+      o.panX = leftoverX>0 ? drag.orig.panX + (dx / (leftoverX/2)) : 0;
+      o.panY = leftoverY>0 ? drag.orig.panY + (dy / (leftoverY/2)) : 0;
+      clampPan(o);
+    }
+    render();
+  });
+
+  window.addEventListener('mouseup', ()=>{
+    if(drag){ drag=null; guideLinesToDraw=[]; render(); }
+  });
+
+  // mouse wheel over selected image (no modifier needed while pan mode on) to zoom
+  canvas.addEventListener('wheel', e=>{
+    const sel = getSelected();
+    if(!sel) return;
+    const pos = pagePosFromEvent(e);
+    const inside = pos.x>=sel.x && pos.x<=sel.x+sel.w && pos.y>=sel.y && pos.y<=sel.y+sel.h;
+    if(!inside) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    sel.zoom = Math.max(1, Math.min(4, sel.zoom + delta));
+    zoomSlider.value = sel.zoom;
+    zoomVal.textContent = Math.round(sel.zoom*100)+'%';
+    clampPan(sel);
+    render();
+  }, { passive:false });
+
+  // keyboard: delete / escape / nudge
+  window.addEventListener('keydown', e=>{
+    if(document.activeElement && ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+    const sel = getSelected();
+    if(e.key === 'Escape'){
+      if(state.panModeActive){ state.panModeActive=false; panModeBtn.classList.remove('active'); panModeBtn.textContent='Drag to reposition inside frame'; }
+      else deselect();
+      render();
+    }
+    if((e.key === 'Delete' || e.key === 'Backspace') && sel){
+      e.preventDefault();
+      state.images = state.images.filter(o=>o.id!==sel.id);
+      deselect(); refreshLayerList(); render();
+    }
+    if(sel && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      if(e.key==='ArrowUp') sel.y -= step;
+      if(e.key==='ArrowDown') sel.y += step;
+      if(e.key==='ArrowLeft') sel.x -= step;
+      if(e.key==='ArrowRight') sel.x += step;
+      render();
+    }
+  });
+
+  /* ================= Export ================= */
+  exportFormat.addEventListener('change', ()=>{
+    jpgQualityField.style.display = exportFormat.value==='jpg' ? 'flex' : 'none';
+  });
+  jpgQualityField.style.display = 'none';
+
+  function renderExportCanvas(){
+    // render fresh without selection/guides for clean export
+    const prevSel = state.selectedId;
+    const prevGuides = guideLinesToDraw;
+    state.selectedId = null;
+    guideLinesToDraw = [];
+    render();
+    // redraw without margin guides too -> create a separate clean canvas
+    const out = document.createElement('canvas');
+    out.width = state.pageW; out.height = state.pageH;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0,0,out.width,out.height);
+    state.images.forEach(obj=>{
+      const d = frameDraw(obj);
+      octx.save();
+      octx.beginPath();
+      octx.rect(obj.x,obj.y,obj.w,obj.h);
+      octx.clip();
+      octx.imageSmoothingEnabled = !obj.pixelated;
+      octx.drawImage(obj.img, d.destX, d.destY, d.destW, d.destH);
+      octx.restore();
+    });
+    state.selectedId = prevSel;
+    guideLinesToDraw = prevGuides;
+    render();
+    return out;
+  }
+
+  function downloadDataUrl(dataUrl, filename){
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  exportBtn.addEventListener('click', ()=>{
+    const out = renderExportCanvas();
+    const fmt = exportFormat.value;
+    if(fmt === 'png'){
+      downloadDataUrl(out.toDataURL('image/png'), 'layout.png');
+    } else if(fmt === 'jpg'){
+      const q = Math.max(0.1, Math.min(1, (parseFloat(jpgQuality.value)||92)/100));
+      downloadDataUrl(out.toDataURL('image/jpeg', q), 'layout.jpg');
+    } else if(fmt === 'pdf'){
+      const { jsPDF } = window.jspdf;
+      const orientation = state.pageW >= state.pageH ? 'l' : 'p';
+      const pdf = new jsPDF({ unit:'px', orientation, format:[state.pageW, state.pageH], compress:true });
+      const imgData = out.toDataURL('image/jpeg', 0.95);
+      pdf.addImage(imgData, 'JPEG', 0, 0, state.pageW, state.pageH);
+      pdf.save('layout.pdf');
+    }
+  });
+
+  /* ================= Batch export ================= */
+  let batchImages = []; // [{name, dataURL}], sorted
+
+  function naturalCompare(a,b){
+    return a.localeCompare(b, undefined, { numeric:true, sensitivity:'base' });
+  }
+  const IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+
+  function fileToDataURL(file){
+    return new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onload = e=> resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  function loadImageElement(dataURL){
+    return new Promise((resolve,reject)=>{
+      const img = new Image();
+      img.onload = ()=> resolve(img);
+      img.onerror = reject;
+      img.src = dataURL;
+    });
+  }
+  function mimeFromName(name){
+    const ext = (name.split('.').pop()||'').toLowerCase();
+    if(ext==='png') return 'image/png';
+    if(ext==='jpg'||ext==='jpeg') return 'image/jpeg';
+    if(ext==='webp') return 'image/webp';
+    if(ext==='gif') return 'image/gif';
+    if(ext==='bmp') return 'image/bmp';
+    if(ext==='svg') return 'image/svg+xml';
+    return 'image/png';
+  }
+
+  function updateBatchStatus(){
+    const frameCount = state.images.length;
+    if(batchImages.length===0){
+      batchStatus.textContent = 'No batch images loaded yet.';
+      batchGenerateBtn.disabled = true;
+      return;
+    }
+    if(frameCount===0){
+      batchStatus.textContent = batchImages.length + ' image(s) loaded, but the layout has no image frames to fill yet.';
+      batchGenerateBtn.disabled = true;
+      return;
+    }
+    const pages = Math.ceil(batchImages.length/frameCount);
+    const lastGroupSize = batchImages.length - (pages-1)*frameCount;
+    let msg = batchImages.length + ' image(s) loaded → will generate ' + pages + ' file' + (pages===1?'':'s') +
+      ' (' + frameCount + ' slot' + (frameCount===1?'':'s') + ' per file).';
+    if(lastGroupSize < frameCount){
+      msg += ' The last file will keep ' + (frameCount-lastGroupSize) + ' original image(s) in unfilled slots.';
+    }
+    batchStatus.textContent = msg;
+    batchGenerateBtn.disabled = false;
+  }
+
+  async function handleBatchFiles(fileList){
+    const files = Array.from(fileList);
+    const collected = [];
+    batchStatus.textContent = 'Reading files…';
+    for(const file of files){
+      const isZip = /\.zip$/i.test(file.name) || file.type==='application/zip' || file.type==='application/x-zip-compressed';
+      if(isZip){
+        try{
+          const zip = await JSZip.loadAsync(file);
+          const entries = Object.values(zip.files).filter(f=> !f.dir && IMG_EXT.test(f.name));
+          entries.sort((a,b)=> naturalCompare(a.name,b.name));
+          for(const entry of entries){
+            const base64 = await entry.async('base64');
+            collected.push({ name: entry.name, dataURL: 'data:'+mimeFromName(entry.name)+';base64,'+base64 });
+          }
+        } catch(err){
+          batchStatus.textContent = 'Could not read zip file "' + file.name + '". Make sure it contains images.';
+          return;
+        }
+      } else if(file.type.startsWith('image/')){
+        const dataURL = await fileToDataURL(file);
+        collected.push({ name: file.name, dataURL });
+      }
+    }
+    if(collected.length===0){
+      batchStatus.textContent = 'No images found in what was added. Try a different file or zip.';
+      return;
+    }
+    collected.sort((a,b)=> naturalCompare(a.name,b.name));
+    batchImages = collected;
+    updateBatchStatus();
+  }
+
+  batchDropzone.addEventListener('click', ()=> batchFileInput.click());
+  batchFileInput.addEventListener('change', e=>{ handleBatchFiles(e.target.files); batchFileInput.value=''; });
+  ['dragenter','dragover'].forEach(ev=> batchDropzone.addEventListener(ev, e=>{ e.preventDefault(); batchDropzone.classList.add('hover'); }));
+  ['dragleave'].forEach(ev=> batchDropzone.addEventListener(ev, e=>{ e.preventDefault(); batchDropzone.classList.remove('hover'); }));
+  batchDropzone.addEventListener('drop', e=>{
+    e.preventDefault(); batchDropzone.classList.remove('hover');
+    handleBatchFiles(e.dataTransfer.files);
+  });
+
+  // Picks a random x,y (within the margin content area) for each frame, keeping
+  // each frame's own size. Makes a handful of attempts per frame and keeps the
+  // one with the least overlap against frames already placed, so images spread
+  // out rather than reliably stacking on top of each other.
+  function computeRandomFramePositions(frames){
+    const positions = new Map();
+    const placed = [];
+    const areaL = state.marginPx.left, areaT = state.marginPx.top;
+    const areaR = state.pageW - state.marginPx.right, areaB = state.pageH - state.marginPx.bottom;
+    const ATTEMPTS = 40;
+    frames.forEach(obj=>{
+      const maxX = Math.max(areaL, areaR - obj.w);
+      const maxY = Math.max(areaT, areaB - obj.h);
+      let best = null, bestOverlap = Infinity;
+      for(let i=0;i<ATTEMPTS;i++){
+        const x = areaL + Math.random()*(maxX-areaL);
+        const y = areaT + Math.random()*(maxY-areaT);
+        let overlap = 0;
+        for(const p of placed){
+          const ox = Math.max(0, Math.min(x+obj.w,p.x+p.w)-Math.max(x,p.x));
+          const oy = Math.max(0, Math.min(y+obj.h,p.y+p.h)-Math.max(y,p.y));
+          overlap += ox*oy;
+        }
+        if(overlap < bestOverlap){ bestOverlap = overlap; best = {x,y}; if(overlap===0) break; }
+      }
+      if(!best) best = {x:areaL, y:areaT};
+      placed.push({x:best.x, y:best.y, w:obj.w, h:obj.h});
+      positions.set(obj.id, best);
+    });
+    return positions;
+  }
+
+  function renderCleanCanvasWithAssignments(assignments, positions){
+    const out = document.createElement('canvas');
+    out.width = state.pageW; out.height = state.pageH;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0,0,out.width,out.height);
+    state.images.forEach(obj=>{
+      const rep = assignments.get(obj.id);
+      const pos = positions && positions.get(obj.id);
+      const x = pos ? pos.x : obj.x;
+      const y = pos ? pos.y : obj.y;
+      const src = rep
+        ? { img:rep, naturalW:rep.naturalWidth, naturalH:rep.naturalHeight, x, y, w:obj.w, h:obj.h, zoom:obj.zoom, panX:obj.panX, panY:obj.panY }
+        : (pos ? { img:obj.img, naturalW:obj.naturalW, naturalH:obj.naturalH, x, y, w:obj.w, h:obj.h, zoom:obj.zoom, panX:obj.panX, panY:obj.panY } : obj);
+      const d = frameDraw(src);
+      octx.save();
+      octx.beginPath();
+      octx.rect(x, y, obj.w, obj.h);
+      octx.clip();
+      octx.imageSmoothingEnabled = !obj.pixelated;
+      octx.drawImage(src.img, d.destX, d.destY, d.destW, d.destH);
+      octx.restore();
+    });
+    return out;
+  }
+
+  function canvasToBlob(canvasEl, type, quality){
+    return new Promise(resolve=> canvasEl.toBlob(resolve, type, quality));
+  }
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 4000);
+  }
+
+  batchGenerateBtn.addEventListener('click', async ()=>{
+    const frames = readingOrderFrames();
+    const frameCount = frames.length;
+    if(frameCount===0 || batchImages.length===0) return;
+
+    batchGenerateBtn.disabled = true;
+    const originalLabel = batchGenerateBtn.textContent;
+    try{
+      const loadedImgs = [];
+      for(let i=0;i<batchImages.length;i++){
+        batchGenerateBtn.textContent = 'Loading images ' + (i+1) + '/' + batchImages.length + '…';
+        loadedImgs.push(await loadImageElement(batchImages[i].dataURL));
+      }
+
+      const totalPages = Math.ceil(loadedImgs.length/frameCount);
+      const fmt = exportFormat.value;
+      const zip = new JSZip();
+      const padLen = String(totalPages).length < 3 ? 3 : String(totalPages).length;
+
+      for(let p=0; p<totalPages; p++){
+        batchGenerateBtn.textContent = 'Generating ' + (p+1) + '/' + totalPages + '…';
+        const assignments = new Map();
+        for(let s=0;s<frameCount;s++){
+          const idx = p*frameCount+s;
+          if(idx < loadedImgs.length) assignments.set(frames[s].id, loadedImgs[idx]);
+        }
+        const positions = randomizePositions.checked ? computeRandomFramePositions(frames) : null;
+        const outCanvas = renderCleanCanvasWithAssignments(assignments, positions);
+        const num = String(p+1).padStart(padLen,'0');
+
+        if(fmt==='pdf'){
+          const { jsPDF } = window.jspdf;
+          const orientation = state.pageW >= state.pageH ? 'l' : 'p';
+          const pdf = new jsPDF({ unit:'px', orientation, format:[state.pageW, state.pageH], compress:true });
+          pdf.addImage(outCanvas.toDataURL('image/jpeg',0.95), 'JPEG', 0, 0, state.pageW, state.pageH);
+          zip.file('page_'+num+'.pdf', pdf.output('blob'));
+        } else if(fmt==='jpg'){
+          const q = Math.max(0.1, Math.min(1, (parseFloat(jpgQuality.value)||92)/100));
+          zip.file('page_'+num+'.jpg', await canvasToBlob(outCanvas,'image/jpeg', q));
+        } else {
+          zip.file('page_'+num+'.png', await canvasToBlob(outCanvas,'image/png'));
+        }
+      }
+
+      batchGenerateBtn.textContent = 'Zipping…';
+      const zipBlob = await zip.generateAsync({ type:'blob' });
+      downloadBlob(zipBlob, 'batch_export.zip');
+      batchStatus.textContent = totalPages + ' file(s) generated and zipped.';
+    } catch(err){
+      console.error(err);
+      batchStatus.textContent = 'Something went wrong generating the batch. Check the console for details.';
+    } finally {
+      batchGenerateBtn.textContent = originalLabel;
+      batchGenerateBtn.disabled = false;
+    }
+  });
+
+  /* ================= Init ================= */
+  syncInputsFromState();
+  recomputePagePx();
+  recomputeMarginPx();
+  fitViewToWindow();
+  render();
+})();
+</script>
+</body>
+</html>
