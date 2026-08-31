@@ -196,16 +196,22 @@
                             <li><button class="nav-btn" data-target="img-weav" onclick="changeText11()">Page Weaver</button></li>
 
                         </ul>
+
+                        <p class="tool-desc">Select a tool above to see how it works.</p>
                     </div>
                 </div>
 
                 <div id="tab-3" class="tab-panel">
+                    <div class="tools-row">
                         <ul class="button-list">
                             <li><button class="nav-btn" data-target="img-splt" onclick="changeText19()">Text Splitter</button></li>
                             <li><button class="nav-btn" data-target="img-rulr" onclick="changeText20()">Inaccurate Ruler</button></li>
                             <li><button class="nav-btn" data-target="img-rgrd" onclick="changeText17()">Random Grid</button></li>
                             <li><button class="nav-btn" data-target="img-gcmp" onclick="changeText12()">Grid Composer</button></li>
-                    </ul>
+                        </ul>
+
+                        <p class="tool-desc">Select a tool above to see how it works.</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -213,27 +219,27 @@
         <!-- Right Side: Conditional Image Gallery Container -->
         <div class="image-column">
             <!-- Images mapped explicitly to the data-target attributes above -->
-            <img id="img-info" class="active" src="Painting.jpg" alt="Painting of a man and woman">
-            <img id="img-comp" src="images/comp.jpg" alt="Low Quality jpeg of Painting">
-            <img id="img-bitm" src="images/bitm.bmp" alt="Bitmap of Painting">
-            <img id="img-crop" src="images/crop.png" alt="Cropped Image of Painting">
-            <img id="img-dial" src="images/dial.gif" alt="Slowly loading gif of Painting">
-            <img id="img-duot" src="images/duot.png" alt="Duotone image of Painting">
-            <img id="img-shif" src="images/shif.png" alt="Pixel Shifted image of Painting">
-            <img id="img-tile" src="images/tile.png" alt="Cut up image of Painting">
-            <img id="img-post" src="images/post.png" alt="Posterized image of Painting">
-            <img id="img-cont" src="images/cont.png" alt="Black and White image of Painting">
-            <img id="img-weav" src="images/weav.png" alt="Page Weaver tool">
-            <img id="img-gcmp" src="images/gcmp.png" alt="Grid Composer tool">
-            <img id="img-layo" src="images/layo.png" alt="Layout Tool">
-            <img id="img-sign" src="images/sign.png" alt="Signature Press tool">
-            <img id="img-rens" src="images/rens.png" alt="Rename and Shuffle tool">
-            <img id="img-jpgc" src="images/jpgc.png" alt="JPEG Compressor Batch tool">
-            <img id="img-rgrd" src="images/rgrd.png" alt="Random Grid tool">
-            <img id="img-enlg" src="images/enlg.png" alt="Enlarger tool">
-            <img id="img-splt" src="images/splt.png" alt="Text Splitter tool">
-            <img id="img-rulr" src="images/rulr.png" alt="Inaccurate Ruler tool">
-            <img id="img-gsfl" src="images/gsfl.png" alt="Grid Shuffler tool">
+            <img id="img-info" class="active" src="images/Painting.jpg" alt="Painting of a man and woman">
+            <img id="img-comp" src="comp.jpg" alt="Low Quality jpeg of Painting">
+            <img id="img-bitm" src="bitm.bmp" alt="Bitmap of Painting">
+            <img id="img-crop" src="crop.png" alt="Cropped Image of Painting">
+            <img id="img-dial" src="dial.gif" alt="Slowly loading gif of Painting">
+            <img id="img-duot" src="duot.png" alt="Duotone image of Painting">
+            <img id="img-shif" src="shif.png" alt="Pixel Shifted image of Painting">
+            <img id="img-tile" src="tile.png" alt="Cut up image of Painting">
+            <img id="img-post" src="post.png" alt="Posterized image of Painting">
+            <img id="img-cont" src="cont.png" alt="Black and White image of Painting">
+            <img id="img-weav" src="weav.png" alt="Preview of the Page Weaver tool">
+            <img id="img-gcmp" src="gcmp.png" alt="Preview of the Grid Composer tool">
+            <img id="img-layo" src="layo.png" alt="Preview of the Layout Tool">
+            <img id="img-sign" src="sign.png" alt="Preview of the Signature Press tool">
+            <img id="img-rens" src="rens.png" alt="Preview of the Rename and Shuffle tool">
+            <img id="img-jpgc" src="jpgc.png" alt="Preview of the JPEG Compressor tool">
+            <img id="img-rgrd" src="rgrd.png" alt="Preview of the Random Grid tool">
+            <img id="img-enlg" src="enlg.png" alt="Preview of the Enlarger tool">
+            <img id="img-splt" src="splt.png" alt="Preview of the Text Splitter tool">
+            <img id="img-rulr" src="rulr.png" alt="Preview of the Inaccurate Ruler tool">
+            <img id="img-gsfl" src="gsfl.png" alt="Preview of the Grid Shuffler tool">
         </div>
     </div>
 
@@ -280,70 +286,81 @@
     </script>
 
    <script>
+        // Finds the description paragraph inside whichever tab panel is
+        // currently open, so buttons in any tab (not just the first) update
+        // the text that's actually visible.
+        function setToolText(html) {
+            const activePanel = document.querySelector('.tab-panel.active');
+            const target = activePanel ? activePanel.querySelector('p') : null;
+            if (target) {
+                target.innerHTML = html;
+            }
+        }
+
         // The JavaScript function called by the button
         // Each uses innerHTML (not textContent) so the <a> tag renders as a real link
         function changeText1() {
-            document.getElementById("myParagraph").innerHTML = 'Learn more about this project: <a href="project-info.html" target="_blank">View Project Info</a>';
+            setToolText('Learn more about this project: <a href="project-info.html" target="_blank">View Project Info</a>');
         }
         function changeText2() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Compressor works: <a href="compressor.html" target="_blank">View Compressor</a>';
+            setToolText('See how the Compressor works: <a href="compressor.html" target="_blank">View Compressor</a>');
         }
         function changeText3() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Bitmap tool works: <a href="bitmap.html" target="_blank">View Bitmap</a>';
+            setToolText('See how the Bitmap tool works: <a href="bitmap.html" target="_blank">View Bitmap</a>');
         }
         function changeText4() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Cropper works: <a href="cropper.html" target="_blank">View Cropper</a>';
+            setToolText('See how the Cropper works: <a href="cropper.html" target="_blank">View Cropper</a>');
         }
         function changeText5() {
-            document.getElementById("myParagraph").innerHTML = 'See how Dial-Up Gifs work: <a href="dial-up-gifs.html" target="_blank">View Dial-Up Gifs</a>';
+            setToolText('See how Dial-Up Gifs work: <a href="dial-up-gifs.html" target="_blank">View Dial-Up Gifs</a>');
         }
         function changeText6() {
-            document.getElementById("myParagraph").innerHTML = 'See how DuoTone works: <a href="duotone.html" target="_blank">View DuoTone</a>';
+            setToolText('See how DuoTone works: <a href="duotone.html" target="_blank">View DuoTone</a>');
         }
         function changeText7() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Shifter works: <a href="shifter.html" target="_blank">View Shifter</a>';
+            setToolText('See how the Shifter works: <a href="shifter.html" target="_blank">View Shifter</a>');
         }
         function changeText8() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Tiler works: <a href="tiler.html" target="_blank">View Tiler</a>';
+            setToolText('See how the Tiler works: <a href="tiler.html" target="_blank">View Tiler</a>');
         }
         function changeText9() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Posterizer works: <a href="posterizer.html" target="_blank">View Posterizer</a>';
+            setToolText('See how the Posterizer works: <a href="posterizer.html" target="_blank">View Posterizer</a>');
         }
         function changeText10() {
-            document.getElementById("myParagraph").innerHTML = 'See how Contrast works: <a href="contrast.html" target="_blank">View Contrast</a>';
+            setToolText('See how Contrast works: <a href="contrast.html" target="_blank">View Contrast</a>');
         }
         function changeText11() {
-            document.getElementById("myParagraph").innerHTML = 'See how Page Weaver works: <a href="page_weaver.html" target="_blank">View Page Weaver</a>';
+            setToolText('See how Page Weaver works: <a href="page_weaver.html" target="_blank">View Page Weaver</a>');
         }
         function changeText12() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Grid Composer works: <a href="svg-grid-composer.html" target="_blank">View Grid Composer</a>';
+            setToolText('See how the Grid Composer works: <a href="svg-grid-composer.html" target="_blank">View Grid Composer</a>');
         }
         function changeText13() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Layout Tool works: <a href="layout-tool.html" target="_blank">View Layout Tool</a>';
+            setToolText('See how the Layout Tool works: <a href="layout-tool.html" target="_blank">View Layout Tool</a>');
         }
         function changeText14() {
-            document.getElementById("myParagraph").innerHTML = 'See how Signature Press works: <a href="signature_press.html" target="_blank">View Signature Press</a>';
+            setToolText('See how Signature Press works: <a href="signature_press.html" target="_blank">View Signature Press</a>');
         }
         function changeText15() {
-            document.getElementById("myParagraph").innerHTML = 'See how Rename &amp; Shuffle works: <a href="Rename-Shuffle.html" target="_blank">View Rename &amp; Shuffle</a>';
+            setToolText('See how Rename &amp; Shuffle works: <a href="Rename-Shuffle.html" target="_blank">View Rename &amp; Shuffle</a>');
         }
         function changeText16() {
-            document.getElementById("myParagraph").innerHTML = 'See how the JPEG Compressor works: <a href="jpeg-compressor-batch.html" target="_blank">View JPEG Compressor</a>';
+            setToolText('See how the JPEG Compressor works: <a href="jpeg-compressor-batch.html" target="_blank">View JPEG Compressor</a>');
         }
         function changeText17() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Random Grid tool works: <a href="random_grid_generator.html" target="_blank">View Random Grid</a>';
+            setToolText('See how the Random Grid tool works: <a href="random_grid_generator.html" target="_blank">View Random Grid</a>');
         }
         function changeText18() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Enlarger works: <a href="enlarger.html" target="_blank">View Enlarger</a>';
+            setToolText('See how the Enlarger works: <a href="enlarger.html" target="_blank">View Enlarger</a>');
         }
         function changeText19() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Text Splitter works: <a href="text-splitter.html" target="_blank">View Text Splitter</a>';
+            setToolText('See how the Text Splitter works: <a href="text-splitter.html" target="_blank">View Text Splitter</a>');
         }
         function changeText20() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Inaccurate Ruler works: <a href="inaccurate_ruler_1.html" target="_blank">View Inaccurate Ruler</a>';
+            setToolText('See how the Inaccurate Ruler works: <a href="inaccurate_ruler_1.html" target="_blank">View Inaccurate Ruler</a>');
         }
         function changeText21() {
-            document.getElementById("myParagraph").innerHTML = 'See how the Grid Shuffler works: <a href="image-grid-shuffler.html" target="_blank">View Grid Shuffler</a>';
+            setToolText('See how the Grid Shuffler works: <a href="image-grid-shuffler.html" target="_blank">View Grid Shuffler</a>');
         }
     </script>
 
