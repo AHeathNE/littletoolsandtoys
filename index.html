@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
     <title>Interactive Button and Image Layout</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/xp.css"
+    >
     <style>
-  rel="stylesheet"
-  href="https://unpkg.com/98.css"
         /* Modern reset and font setup */
         * {
             box-sizing: border-box;
@@ -54,7 +56,7 @@
         .image-column {
             flex: 1; /* Takes up 50% width */
             position: relative;
-            min-height: 400px;
+            height: 400px;
         }
         
         /* Image presentation layout */
@@ -80,13 +82,69 @@
                 width: 100%;
             }
             .image-column {
-                min-height: auto;
+                height: 300px;
             }
             .image-column img {
                 height: 300px;
             }
         }
 
+
+        /* Tabs window holding grouped links, sits where the old button list was */
+        .tabs-section {
+            width: 100%;
+        }
+        .tab-strip {
+            display: flex;
+            gap: 4px;
+            list-style: none;
+            border-bottom: 2px solid #999;
+        }
+        .tab-strip li {
+            margin-bottom: -2px;
+        }
+        .tab-btn {
+            padding: 8px 18px;
+            cursor: pointer;
+        }
+        .tab-btn.active {
+            border-bottom: 2px solid #fff;
+            background: #ece9d8;
+        }
+        .tab-panel {
+            display: none;
+            padding: 20px;
+            border: 1px solid #999;
+            border-top: none;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+        .tab-panel ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Buttons on the left, description text to their right */
+        .tools-row {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+        .tools-row .button-list {
+            flex: 0 0 auto;
+        }
+        .tools-row p {
+            flex: 1;
+            font-size: 1.1rem;
+        }
+        @media (max-width: 768px) {
+            .tools-row {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -95,27 +153,67 @@
         <!-- Left Side: Writing and Controls -->
         <div class="text-column">
             <h1>Design Tools and Toys</h1>
-                <p id="myParagraph">This is the original text.</p>
-            
-            <!-- List of targeted trigger buttons -->
-            <ul class="button-list">
-                <li><button class="nav-btn active" data-target="img-info" onclick="changeText1()">*Project Info*</button></li>
-                <li><button class="nav-btn" data-target="img-comp" onclick="changeText2()">Compressor</button></li>
-                <li><button class="nav-btn" data-target="img-bitm" onclick="changeText3()">Bitmap</button></li>
-                <li><button class="nav-btn" data-target="img-crop" onclick="changeText4()">Cropper</button></li>
-                <li><button class="nav-btn" data-target="img-dial" onclick="changeText5()">Dial-Up Gifs</button></li>
-                <li><button class="nav-btn" data-target="img-duot" onclick="changeText6()">DuoTone</button></li>
-                <li><button class="nav-btn" data-target="img-shif" onclick="changeText7()">Shifter</button></li>
-                <li><button class="nav-btn" data-target="img-tile" onclick="changeText8()">Tiler</button></li>
-                <li><button class="nav-btn" data-target="img-post" onclick="changeText9()">Posterizer</button></li>
-                <li><button class="nav-btn" data-target="img-cont" onclick="changeText10()">Contrast</button></li>
-            </ul>
+
+            <!-- Tabbed window sitting where the button list used to be -->
+            <div class="tabs-section">
+                <ul class="tab-strip">
+                    <li><button class="tab-btn active" data-tab="tab-1">Image Making</button></li>
+                    <li><button class="tab-btn" data-tab="tab-2">Printing</button></li>
+                    <li><button class="tab-btn" data-tab="tab-3">Silly Projects</button></li>
+                </ul>
+
+                <div id="tab-1" class="tab-panel active">
+                    <div class="tools-row">
+                        <!-- List of targeted trigger buttons -->
+                        <ul class="button-list">
+                            <li><button class="nav-btn active" data-target="img-info" onclick="changeText1()">*Project Info*</button></li>
+                            <li><button class="nav-btn" data-target="img-comp" onclick="changeText2()">Compressor</button></li>
+                            <li><button class="nav-btn" data-target="img-bitm" onclick="changeText3()">Bitmap</button></li>
+                            <li><button class="nav-btn" data-target="img-crop" onclick="changeText4()">Cropper</button></li>
+                            <li><button class="nav-btn" data-target="img-dial" onclick="changeText5()">Dial-Up Gifs</button></li>
+                            <li><button class="nav-btn" data-target="img-duot" onclick="changeText6()">DuoTone</button></li>
+                            <li><button class="nav-btn" data-target="img-shif" onclick="changeText7()">Shifter</button></li>
+                            <li><button class="nav-btn" data-target="img-tile" onclick="changeText8()">Tiler</button></li>
+                            <li><button class="nav-btn" data-target="img-post" onclick="changeText9()">Posterizer</button></li>
+                            <li><button class="nav-btn" data-target="img-cont" onclick="changeText10()">Contrast</button></li>
+                            <li><button class="nav-btn" data-target="img-jpgc" onclick="changeText16()">JPEG Compressor Batch</button></li>
+                            <li><button class="nav-btn" data-target="img-enlg" onclick="changeText18()">Enlarger</button></li>
+                            <li><button class="nav-btn" data-target="img-gsfl" onclick="changeText21()">Grid Shuffler</button></li>
+                        </ul>
+
+                        <!-- Description text, now beside the buttons instead of above the window -->
+                        <p id="myParagraph">This is the original text.</p>
+                    </div>
+                </div>
+
+                <div id="tab-2" class="tab-panel">
+                    <div class="tools-row">
+                        <!-- List of targeted trigger buttons -->
+                        <ul class="button-list">
+                            <li><button class="nav-btn" data-target="img-layo" onclick="changeText13()">Layout Tool</button></li>
+                            <li><button class="nav-btn" data-target="img-sign" onclick="changeText14()">Signature Press</button></li>
+                            <li><button class="nav-btn" data-target="img-rens" onclick="changeText15()">Rename &amp; Shuffle</button></li>
+                            <li><button class="nav-btn" data-target="img-weav" onclick="changeText11()">Page Weaver</button></li>
+
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="tab-3" class="tab-panel">
+                        <ul class="button-list">
+                            <li><button class="nav-btn" data-target="img-splt" onclick="changeText19()">Text Splitter</button></li>
+                            <li><button class="nav-btn" data-target="img-rulr" onclick="changeText20()">Inaccurate Ruler</button></li>
+                            <li><button class="nav-btn" data-target="img-rgrd" onclick="changeText17()">Random Grid</button></li>
+                            <li><button class="nav-btn" data-target="img-gcmp" onclick="changeText12()">Grid Composer</button></li>
+                    </ul>
+                </div>
+            </div>
         </div>
 
         <!-- Right Side: Conditional Image Gallery Container -->
         <div class="image-column">
             <!-- Images mapped explicitly to the data-target attributes above -->
-            <img id="img-info" class="active" src="images/Painting.jpg" alt="Painting of a man and woman">
+            <img id="img-info" class="active" src="Painting.jpg" alt="Painting of a man and woman">
             <img id="img-comp" src="images/comp.jpg" alt="Low Quality jpeg of Painting">
             <img id="img-bitm" src="images/bitm.bmp" alt="Bitmap of Painting">
             <img id="img-crop" src="images/crop.png" alt="Cropped Image of Painting">
@@ -125,6 +223,17 @@
             <img id="img-tile" src="images/tile.png" alt="Cut up image of Painting">
             <img id="img-post" src="images/post.png" alt="Posterized image of Painting">
             <img id="img-cont" src="images/cont.png" alt="Black and White image of Painting">
+            <img id="img-weav" src="images/weav.png" alt="Page Weaver tool">
+            <img id="img-gcmp" src="images/gcmp.png" alt="Grid Composer tool">
+            <img id="img-layo" src="images/layo.png" alt="Layout Tool">
+            <img id="img-sign" src="images/sign.png" alt="Signature Press tool">
+            <img id="img-rens" src="images/rens.png" alt="Rename and Shuffle tool">
+            <img id="img-jpgc" src="images/jpgc.png" alt="JPEG Compressor Batch tool">
+            <img id="img-rgrd" src="images/rgrd.png" alt="Random Grid tool">
+            <img id="img-enlg" src="images/enlg.png" alt="Enlarger tool">
+            <img id="img-splt" src="images/splt.png" alt="Text Splitter tool">
+            <img id="img-rulr" src="images/rulr.png" alt="Inaccurate Ruler tool">
+            <img id="img-gsfl" src="images/gsfl.png" alt="Grid Shuffler tool">
         </div>
     </div>
 
@@ -152,6 +261,22 @@
                 }
             });
         }); 
+    </script>
+
+    <script>
+        // Logic for the new link tabs
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+
+        tabButtons.forEach(tabBtn => {
+            tabBtn.addEventListener('click', () => {
+                tabButtons.forEach(b => b.classList.remove('active'));
+                tabPanels.forEach(p => p.classList.remove('active'));
+
+                tabBtn.classList.add('active');
+                document.getElementById(tabBtn.getAttribute('data-tab')).classList.add('active');
+            });
+        });
     </script>
 
    <script>
@@ -187,9 +312,41 @@
         function changeText10() {
             document.getElementById("myParagraph").innerHTML = 'See how Contrast works: <a href="contrast.html" target="_blank">View Contrast</a>';
         }
+        function changeText11() {
+            document.getElementById("myParagraph").innerHTML = 'See how Page Weaver works: <a href="page_weaver.html" target="_blank">View Page Weaver</a>';
+        }
+        function changeText12() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Grid Composer works: <a href="svg-grid-composer.html" target="_blank">View Grid Composer</a>';
+        }
+        function changeText13() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Layout Tool works: <a href="layout-tool.html" target="_blank">View Layout Tool</a>';
+        }
+        function changeText14() {
+            document.getElementById("myParagraph").innerHTML = 'See how Signature Press works: <a href="signature_press.html" target="_blank">View Signature Press</a>';
+        }
+        function changeText15() {
+            document.getElementById("myParagraph").innerHTML = 'See how Rename &amp; Shuffle works: <a href="Rename-Shuffle.html" target="_blank">View Rename &amp; Shuffle</a>';
+        }
+        function changeText16() {
+            document.getElementById("myParagraph").innerHTML = 'See how the JPEG Compressor works: <a href="jpeg-compressor-batch.html" target="_blank">View JPEG Compressor</a>';
+        }
+        function changeText17() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Random Grid tool works: <a href="random_grid_generator.html" target="_blank">View Random Grid</a>';
+        }
+        function changeText18() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Enlarger works: <a href="enlarger.html" target="_blank">View Enlarger</a>';
+        }
+        function changeText19() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Text Splitter works: <a href="text-splitter.html" target="_blank">View Text Splitter</a>';
+        }
+        function changeText20() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Inaccurate Ruler works: <a href="inaccurate_ruler_1.html" target="_blank">View Inaccurate Ruler</a>';
+        }
+        function changeText21() {
+            document.getElementById("myParagraph").innerHTML = 'See how the Grid Shuffler works: <a href="image-grid-shuffler.html" target="_blank">View Grid Shuffler</a>';
+        }
     </script>
 
 
 </body>
 </html>
-
