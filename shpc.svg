@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 400">
-  <rect width="450" height="400" fill="#ece9d8"/>
-  <rect x="10" y="10" width="430" height="380" fill="#fdfdfb" stroke="#999" stroke-width="2"/>
-  <rect x="10" y="10" width="430" height="28" fill="#c8c4b4" stroke="#999" stroke-width="2"/>
-  <circle cx="26" cy="24" r="6" fill="#999"/>
-  <text x="225" y="120" font-family="Tahoma, Geneva, sans-serif" font-size="13" fill="#888" text-anchor="middle">PREVIEW NOT YET AVAILABLE</text>
-  <text font-family="Tahoma, Geneva, sans-serif" font-size="22" font-weight="bold" fill="#333" text-anchor="middle"><tspan x="225" y="206.5">Shape Cutter</tspan></text>
-</svg>
