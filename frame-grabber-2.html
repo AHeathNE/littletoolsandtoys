@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Frame Grabber</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e38;
+    --text: #e8e9ec;
+    --muted: #9aa0ac;
+    --accent: #6ea8fe;
+    --accent-hover: #8fbcff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .wrap { width: 100%; max-width: 640px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .drop:hover, .drop.dragover { border-color: var(--accent); }
+  .drop input { display: none; }
+  .filename { font-size: 13px; color: var(--muted); margin-top: 8px; word-break: break-all; }
+  .row { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  label { font-size: 13px; color: var(--muted); }
+  input[type="number"] {
+    background: #0f1115;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    width: 90px;
+    font-size: 14px;
+  }
+  input[type="range"] {
+    flex: 1;
+    min-width: 160px;
+    accent-color: var(--accent);
+  }
+  button {
+    background: var(--accent);
+    color: #0f1115;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #3a3f4a; color: var(--muted); cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  button.secondary:hover { border-color: var(--accent); background: transparent; }
+  .status { font-size: 13px; color: var(--muted); margin-top: 10px; min-height: 18px; }
+  .status.error { color: #ff8080; }
+  canvas {
+    display: block;
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-top: 4px;
+    background:
+      linear-gradient(45deg, #222 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(-45deg, #222 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(45deg, transparent 75%, #222 75%) -8px 0/16px 16px,
+      linear-gradient(-45deg, transparent 75%, #222 75%) -8px 0/16px 16px,
+      #2c2f38;
+  }
+  .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  video { display: none; }
+  .time-readout { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text); min-width: 48px; text-align: right; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Frame Grabber</h1>
+  <p class="sub">Pull a single still frame out of a video or GIF, right in your browser. Nothing is uploaded anywhere.</p>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      <div>Click to choose a video or GIF, or drag one here</div>
+      <input type="file" id="fileInput" accept="video/*,image/gif">
+      <div class="filename" id="filename"></div>
+    </div>
+
+    <div class="row">
+      <input type="range" id="scrub" min="0" max="0" step="0.05" value="0" disabled>
+      <span class="time-readout" id="readout">0.0s</span>
+    </div>
+    <div class="row">
+      <label for="time">Jump to</label>
+      <input type="number" id="time" value="5" min="0" step="0.1" disabled>
+      <label>seconds</label>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel" id="resultPanel" style="display:none">
+    <canvas id="canvas"></canvas>
+    <div class="actions">
+      <button id="downloadBtn">Download PNG</button>
+      <button class="secondary" id="copyBtn">Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+
+<video id="hiddenVideo" muted playsinline></video>
+
+<script>
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const filenameEl = document.getElementById('filename');
+const timeInput = document.getElementById('time');
+const scrub = document.getElementById('scrub');
+const readout = document.getElementById('readout');
+const statusEl = document.getElementById('status');
+const resultPanel = document.getElementById('resultPanel');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const downloadBtn = document.getElementById('downloadBtn');
+const copyBtn = document.getElementById('copyBtn');
+const hiddenVideo = document.getElementById('hiddenVideo');
+
+let currentKind = null; // 'video' | 'gif'
+let gifComposited = null; // { width, height, frames: [{cumMs, imageData}] }
+let videoDuration = 0;
+let rafPending = false;
+let pendingTime = 0;
+let videoSeekBusy = false;
+let videoSeekQueued = null;
+
+function setStatus(msg, isError) {
+  statusEl.textContent = msg || '';
+  statusEl.className = 'status' + (isError ? ' error' : '');
+}
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+async function handleFile(file) {
+  gifComposited = null;
+  filenameEl.textContent = file.name;
+  resultPanel.style.display = 'none';
+  scrub.disabled = true;
+  timeInput.disabled = true;
+  setStatus('');
+
+  if (file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')) {
+    currentKind = 'gif';
+    setStatus('Reading GIF…');
+    try {
+      const buf = await file.arrayBuffer();
+      const parsed = parseGIF(buf);
+      gifComposited = compositeAllFrames(parsed);
+      const totalMs = gifComposited.frames[gifComposited.frames.length - 1].cumMs;
+      setupScrub(totalMs / 1000);
+      setStatus(`GIF loaded — ${gifComposited.frames.length} frames, ~${(totalMs/1000).toFixed(1)}s total. Drag the slider to preview.`);
+      renderAtTime(Math.min(5, totalMs/1000));
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not parse this GIF: ' + err.message, true);
+    }
+  } else if (file.type.startsWith('video/')) {
+    currentKind = 'video';
+    hiddenVideo.src = URL.createObjectURL(file);
+    setStatus('Reading video…');
+    hiddenVideo.onloadedmetadata = () => {
+      videoDuration = hiddenVideo.duration;
+      setupScrub(videoDuration);
+      setStatus(`Video loaded — duration ${videoDuration.toFixed(1)}s. Drag the slider to preview.`);
+      renderAtTime(Math.min(5, videoDuration));
+    };
+    hiddenVideo.onerror = () => setStatus('Could not read this video file.', true);
+  } else {
+    setStatus('Please choose a video file or a GIF.', true);
+  }
+}
+
+function setupScrub(maxSeconds) {
+  scrub.min = 0;
+  scrub.max = maxSeconds.toFixed(2);
+  scrub.step = 0.05;
+  scrub.disabled = false;
+  timeInput.disabled = false;
+  timeInput.max = maxSeconds.toFixed(2);
+}
+
+function renderAtTime(t) {
+  t = Math.max(0, t);
+  scrub.value = t;
+  timeInput.value = Math.round(t * 10) / 10;
+  readout.textContent = t.toFixed(1) + 's';
+  if (currentKind === 'video') drawVideoFrame(t);
+  else if (currentKind === 'gif') drawGifFrame(t);
+}
+
+// throttle scrub input to animation frames so dragging stays smooth
+function queueRender(t) {
+  pendingTime = t;
+  if (rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(() => {
+    rafPending = false;
+    renderAtTime(pendingTime);
+  });
+}
+
+scrub.addEventListener('input', () => queueRender(parseFloat(scrub.value)));
+timeInput.addEventListener('change', () => renderAtTime(parseFloat(timeInput.value) || 0));
+
+function drawVideoFrame(t) {
+  const target = Math.min(t, Math.max(0, videoDuration - 0.03));
+  if (videoSeekBusy) { videoSeekQueued = target; return; }
+  videoSeekBusy = true;
+  const onSeeked = () => {
+    hiddenVideo.removeEventListener('seeked', onSeeked);
+    canvas.width = hiddenVideo.videoWidth;
+    canvas.height = hiddenVideo.videoHeight;
+    ctx.drawImage(hiddenVideo, 0, 0);
+    resultPanel.style.display = 'block';
+    videoSeekBusy = false;
+    if (videoSeekQueued !== null) {
+      const q = videoSeekQueued;
+      videoSeekQueued = null;
+      drawVideoFrame(q);
+    }
+  };
+  hiddenVideo.addEventListener('seeked', onSeeked);
+  hiddenVideo.currentTime = target;
+}
+
+function drawGifFrame(t) {
+  if (!gifComposited) return;
+  const targetMs = t * 1000;
+  const frames = gifComposited.frames;
+  let idx = frames.findIndex(f => f.cumMs >= targetMs);
+  if (idx === -1) idx = frames.length - 1;
+  canvas.width = gifComposited.width;
+  canvas.height = gifComposited.height;
+  ctx.putImageData(frames[idx].imageData, 0, 0);
+  resultPanel.style.display = 'block';
+}
+
+downloadBtn.addEventListener('click', () => {
+  canvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'frame.png';
+    a.click();
+  }, 'image/png');
+});
+
+copyBtn.addEventListener('click', () => {
+  canvas.toBlob(async blob => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      setStatus('Copied to clipboard.');
+    } catch (err) {
+      setStatus('Clipboard copy not supported in this browser — use Download instead.', true);
+    }
+  }, 'image/png');
+});
+
+// ---------------- GIF parsing ----------------
+
+function parseGIF(buffer) {
+  const data = new Uint8Array(buffer);
+  let pos = 0;
+
+  function readByte() { return data[pos++]; }
+  function readU16() { const v = data[pos] | (data[pos+1] << 8); pos += 2; return v; }
+
+  const sig = String.fromCharCode(data[0], data[1], data[2], data[3], data[4], data[5]);
+  if (sig !== 'GIF87a' && sig !== 'GIF89a') throw new Error('Not a GIF file');
+  pos = 6;
+
+  const width = readU16();
+  const height = readU16();
+  const packed = readByte();
+  const gctFlag = (packed & 0x80) !== 0;
+  const gctSize = 2 << (packed & 0x07);
+  readByte(); // bg color index
+  readByte(); // pixel aspect ratio
+
+  let globalColorTable = null;
+  if (gctFlag) globalColorTable = readColorTable(gctSize);
+
+  const frames = [];
+  let gce = null;
+
+  function readColorTable(size) {
+    const table = new Uint8Array(size * 3);
+    for (let i = 0; i < size * 3; i++) table[i] = readByte();
+    return table;
+  }
+
+  function readSubBlocks() {
+    const bytes = [];
+    let size;
+    while ((size = readByte()) !== 0) {
+      for (let i = 0; i < size; i++) bytes.push(readByte());
+    }
+    return new Uint8Array(bytes);
+  }
+
+  while (pos < data.length) {
+    const blockType = readByte();
+
+    if (blockType === 0x21) {
+      const label = readByte();
+      if (label === 0xF9) {
+        readByte(); // block size, should be 4
+        const p = readByte();
+        const delayRaw = readU16();
+        const transparentIndex = readByte();
+        readByte(); // terminator
+        gce = {
+          disposal: (p >> 2) & 0x07,
+          transparent: (p & 0x01) !== 0,
+          transparentIndex,
+          delayMs: (delayRaw === 0 ? 10 : delayRaw) * 10
+        };
+      } else {
+        readSubBlocks();
+      }
+    } else if (blockType === 0x2C) {
+      const left = readU16();
+      const top = readU16();
+      const w = readU16();
+      const h = readU16();
+      const p = readByte();
+      const lctFlag = (p & 0x80) !== 0;
+      const interlaced = (p & 0x40) !== 0;
+      const lctSize = 2 << (p & 0x07);
+
+      let colorTable = globalColorTable;
+      if (lctFlag) colorTable = readColorTable(lctSize);
+
+      const minCodeSize = readByte();
+      const imgData = readSubBlocks();
+      const indices = lzwDecode(minCodeSize, imgData, w * h);
+      const pixels = deinterlace(indices, w, h, interlaced);
+
+      const imageData = new ImageData(w, h);
+      const transIdx = gce && gce.transparent ? gce.transparentIndex : -1;
+      for (let i = 0; i < w * h; i++) {
+        const ci = pixels[i];
+        const o = i * 4;
+        if (ci === transIdx || !colorTable) {
+          imageData.data[o+3] = 0;
+        } else {
+          imageData.data[o] = colorTable[ci*3];
+          imageData.data[o+1] = colorTable[ci*3+1];
+          imageData.data[o+2] = colorTable[ci*3+2];
+          imageData.data[o+3] = 255;
+        }
+      }
+
+      frames.push({
+        left, top, width: w, height: h,
+        imageData,
+        delayMs: gce ? gce.delayMs : 100,
+        disposal: gce ? gce.disposal : 0
+      });
+      gce = null;
+    } else if (blockType === 0x3B) {
+      break;
+    } else {
+      break;
+    }
+  }
+
+  if (frames.length === 0) throw new Error('No frames found');
+  return { width, height, frames };
+}
+
+// Pre-render every composited frame once, so scrubbing is just a lookup.
+function compositeAllFrames(parsed) {
+  const { width, height, frames } = parsed;
+  const work = document.createElement('canvas');
+  work.width = width;
+  work.height = height;
+  const wctx = work.getContext('2d');
+
+  const out = [];
+  let elapsed = 0;
+  let prevSnapshot = null;
+  let prevDisposal = 0;
+  let prevRect = null;
+
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+
+    if (prevDisposal === 2 && prevRect) {
+      wctx.clearRect(prevRect.left, prevRect.top, prevRect.width, prevRect.height);
+    } else if (prevDisposal === 3 && prevSnapshot) {
+      wctx.putImageData(prevSnapshot, 0, 0);
+    }
+
+    if (f.disposal === 3) {
+      prevSnapshot = wctx.getImageData(0, 0, width, height);
+    } else {
+      prevSnapshot = null;
+    }
+
+    const frameCanvas = document.createElement('canvas');
+    frameCanvas.width = f.width;
+    frameCanvas.height = f.height;
+    frameCanvas.getContext('2d').putImageData(f.imageData, 0, 0);
+    wctx.drawImage(frameCanvas, f.left, f.top);
+
+    prevDisposal = f.disposal;
+    prevRect = { left: f.left, top: f.top, width: f.width, height: f.height };
+
+    elapsed += f.delayMs;
+    out.push({ cumMs: elapsed, imageData: wctx.getImageData(0, 0, width, height) });
+  }
+
+  return { width, height, frames: out };
+}
+
+function deinterlace(indices, w, h, interlaced) {
+  if (!interlaced) return indices;
+  const out = new Uint8Array(w * h);
+  const passes = [ [0,8], [4,8], [2,4], [1,2] ];
+  let srcRow = 0;
+  for (const [start, step] of passes) {
+    for (let row = start; row < h; row += step) {
+      out.set(indices.subarray(srcRow*w, srcRow*w + w), row*w);
+      srcRow++;
+    }
+  }
+  return out;
+}
+
+function lzwDecode(minCodeSize, data, pixelCount) {
+  const clearCode = 1 << minCodeSize;
+  const eoiCode = clearCode + 1;
+  let codeSize, dict;
+
+  function resetDict() {
+    dict = [];
+    for (let i = 0; i < clearCode; i++) dict.push([i]);
+    dict.push(null);
+    dict.push(null);
+    codeSize = minCodeSize + 1;
+  }
+  resetDict();
+
+  const output = new Uint8Array(pixelCount);
+  let outPos = 0;
+  let bitBuffer = 0, bitsInBuffer = 0, pos = 0;
+  let prevCode = null;
+
+  function readCode() {
+    while (bitsInBuffer < codeSize && pos < data.length) {
+      bitBuffer |= data[pos++] << bitsInBuffer;
+      bitsInBuffer += 8;
+    }
+    const code = bitBuffer & ((1 << codeSize) - 1);
+    bitBuffer >>= codeSize;
+    bitsInBuffer -= codeSize;
+    return code;
+  }
+
+  while (pos < data.length || bitsInBuffer >= codeSize) {
+    if (outPos >= pixelCount) break;
+    const code = readCode();
+    if (code === clearCode) { resetDict(); prevCode = null; continue; }
+    if (code === eoiCode) break;
+
+    let entry;
+    if (code < dict.length && dict[code]) {
+      entry = dict[code];
+    } else if (code === dict.length && prevCode !== null) {
+      entry = dict[prevCode].concat(dict[prevCode][0]);
+    } else {
+      break;
+    }
+
+    for (let i = 0; i < entry.length && outPos < pixelCount; i++) output[outPos++] = entry[i];
+
+    if (prevCode !== null && dict.length < 4096) {
+      dict.push(dict[prevCode].concat(entry[0]));
+      if (dict.length === (1 << codeSize) && codeSize < 12) codeSize++;
+    }
+    prevCode = code;
+  }
+
+  return output;
+}
+</script>
+</body>
+</html>

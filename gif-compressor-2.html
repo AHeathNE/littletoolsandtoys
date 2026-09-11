@@ -1,0 +1,579 @@
+<div>
+<h2 class="sr-only">A GIF compressor: upload an animated GIF, choose a color count, resize percentage, and frame reduction, and see the original and compressed versions side by side before downloading.</h2>
+
+<div style="border: 0.5px dashed var(--border-strong); border-radius: var(--radius); padding: 2rem 1rem; text-align: center; cursor: pointer;" id="dropzone">
+  <i class="ti ti-upload" style="font-size: 24px; color: var(--text-muted);" aria-hidden="true"></i>
+  <p style="font-size: 14px; color: var(--text-secondary); margin: 8px 0 0;">Drop an animated GIF here, or click to choose one</p>
+  <input type="file" id="fileInput" accept="image/gif" style="display: none;" />
+</div>
+
+<div id="controls" style="display: none; margin-top: 1.5rem;">
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+    <label style="font-size: 14px; color: var(--text-secondary); width: 76px;">Colors</label>
+    <input type="range" min="2" max="256" step="1" value="64" id="colors" style="flex: 1;" />
+    <span style="font-size: 14px; font-weight: 500; min-width: 40px; text-align: right;" id="colorsOut">64</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+    <label style="font-size: 14px; color: var(--text-secondary); width: 76px;">Scale</label>
+    <input type="range" min="10" max="100" step="5" value="100" id="scale" style="flex: 1;" />
+    <span style="font-size: 14px; font-weight: 500; min-width: 40px; text-align: right;" id="scaleOut">100%</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 1rem;">
+    <label style="font-size: 14px; color: var(--text-secondary); width: 76px;">Frames</label>
+    <input type="range" min="10" max="100" step="5" value="100" id="frames" style="flex: 1;" />
+    <span style="font-size: 14px; font-weight: 500; min-width: 40px; text-align: right;" id="framesOut">100%</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+    <div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 6px;">Original</p>
+      <div style="background: var(--surface-1); border-radius: var(--radius); padding: 8px; display: flex; justify-content: center;">
+        <img id="imgOriginal" style="max-width: 100%; height: auto;" />
+      </div>
+      <p style="font-size: 16px; font-weight: 500; margin: 8px 0 0;" id="originalSize">—</p>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 0;" id="originalDims"></p>
+    </div>
+    <div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 6px;">Compressed</p>
+      <div style="background: var(--surface-1); border-radius: var(--radius); padding: 8px; display: flex; justify-content: center; position: relative;">
+        <img id="imgCompressed" style="max-width: 100%; height: auto;" />
+        <div id="renderingMsg" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; font-size: 12px; color: var(--text-muted); background: var(--surface-1);">Rendering…</div>
+      </div>
+      <p style="font-size: 16px; font-weight: 500; margin: 8px 0 0;" id="compressedSize">—</p>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 0;" id="compressedDims"></p>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 1rem;">
+    <button id="downloadBtn"><i class="ti ti-download" style="font-size: 16px; vertical-align: -3px; margin-right: 4px;" aria-hidden="true"></i>Download .gif</button>
+  </div>
+
+  <div id="statusMsg" style="display: none; align-items: center; gap: 6px; justify-content: flex-end; margin-top: 8px; font-size: 13px; color: var(--text-success);">
+    <i class="ti ti-check" style="font-size: 16px;" aria-hidden="true"></i>
+    <span>Downloaded as compressed.gif</span>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   GIF codec: LZW encode/decode, median-cut quantizer, GIF89a encoder/decoder.
+   Pure JS, no external dependencies. Round-trip verified independently
+   before wiring up to the UI.
+   ========================================================================= */
+
+function lzwEncode(minCodeSize, indexStream) {
+  const clearCode = 1 << minCodeSize;
+  const eoiCode = clearCode + 1;
+  let codeSize, nextCode, dict;
+  function resetDict() {
+    dict = new Map();
+    for (let i = 0; i < clearCode; i++) dict.set(String(i), i);
+    nextCode = eoiCode + 1;
+    codeSize = minCodeSize + 1;
+  }
+  const output = [];
+  let bitBuffer = 0, bitCount = 0;
+  function emit(code) {
+    bitBuffer |= (code << bitCount);
+    bitCount += codeSize;
+    while (bitCount >= 8) { output.push(bitBuffer & 0xFF); bitBuffer >>= 8; bitCount -= 8; }
+  }
+  resetDict();
+  emit(clearCode);
+  if (indexStream.length === 0) {
+    emit(eoiCode);
+    if (bitCount > 0) output.push(bitBuffer & 0xFF);
+    return output;
+  }
+  let w = String(indexStream[0]);
+  for (let i = 1; i < indexStream.length; i++) {
+    const k = indexStream[i];
+    const wk = w + "," + k;
+    if (dict.has(wk)) {
+      w = wk;
+    } else {
+      emit(dict.get(w));
+      if (nextCode < 4096) {
+        dict.set(wk, nextCode);
+        nextCode++;
+        if (nextCode === (1 << codeSize) + 1 && codeSize < 12) codeSize++;
+      } else {
+        emit(clearCode);
+        resetDict();
+      }
+      w = String(k);
+    }
+  }
+  emit(dict.get(w));
+  emit(eoiCode);
+  if (bitCount > 0) output.push(bitBuffer & 0xFF);
+  return output;
+}
+
+function lzwDecode(minCodeSize, data) {
+  const clearCode = 1 << minCodeSize;
+  const eoiCode = clearCode + 1;
+  let codeSize, dict;
+  function resetDict() {
+    dict = [];
+    for (let i = 0; i < clearCode; i++) dict.push([i]);
+    dict.push(null); dict.push(null);
+    codeSize = minCodeSize + 1;
+  }
+  resetDict();
+  let bitBuffer = 0, bitCount = 0, pos = 0;
+  function readCode() {
+    while (bitCount < codeSize) {
+      if (pos >= data.length) return null;
+      bitBuffer |= (data[pos] << bitCount);
+      bitCount += 8; pos++;
+    }
+    const code = bitBuffer & ((1 << codeSize) - 1);
+    bitBuffer >>= codeSize; bitCount -= codeSize;
+    return code;
+  }
+  const output = [];
+  let prev = null;
+  while (true) {
+    const code = readCode();
+    if (code === null || code === eoiCode) break;
+    if (code === clearCode) { resetDict(); prev = null; continue; }
+    let entry;
+    if (code < dict.length && dict[code]) entry = dict[code];
+    else if (code === dict.length && prev) entry = prev.concat([prev[0]]);
+    else throw new Error("Malformed GIF data (bad LZW code)");
+    for (let i = 0; i < entry.length; i++) output.push(entry[i]);
+    if (prev) {
+      dict.push(prev.concat([entry[0]]));
+      if (dict.length === (1 << codeSize) && codeSize < 12) codeSize++;
+    }
+    prev = entry;
+  }
+  return output;
+}
+
+function quantizeMedianCut(pixels, maxColors) {
+  let boxes = [{ pixels: [] }];
+  const pts = [];
+  for (let i = 0; i < pixels.length; i += 3) pts.push([pixels[i], pixels[i+1], pixels[i+2]]);
+  boxes[0].pixels = pts;
+
+  function boxRange(box) {
+    let rmin=255,rmax=0,gmin=255,gmax=0,bmin=255,bmax=0;
+    for (const p of box.pixels) {
+      if (p[0]<rmin) rmin=p[0]; if (p[0]>rmax) rmax=p[0];
+      if (p[1]<gmin) gmin=p[1]; if (p[1]>gmax) gmax=p[1];
+      if (p[2]<bmin) bmin=p[2]; if (p[2]>bmax) bmax=p[2];
+    }
+    return {rmin,rmax,gmin,gmax,bmin,bmax};
+  }
+  function splitBox(box) {
+    const {rmin,rmax,gmin,gmax,bmin,bmax} = boxRange(box);
+    const rr = rmax-rmin, rg = gmax-gmin, rb = bmax-bmin;
+    let axis = 0;
+    if (rg >= rr && rg >= rb) axis = 1;
+    else if (rb >= rr && rb >= rg) axis = 2;
+    box.pixels.sort((a,b) => a[axis]-b[axis]);
+    const mid = Math.floor(box.pixels.length/2);
+    return [{ pixels: box.pixels.slice(0, mid) }, { pixels: box.pixels.slice(mid) }];
+  }
+  while (boxes.length < maxColors) {
+    let idx = -1, best = 1;
+    for (let i = 0; i < boxes.length; i++) {
+      if (boxes[i].pixels.length > best) { best = boxes[i].pixels.length; idx = i; }
+    }
+    if (idx === -1) break;
+    const [b1, b2] = splitBox(boxes[idx]);
+    boxes.splice(idx, 1, b1, b2);
+  }
+  const palette = boxes.filter(b => b.pixels.length > 0).map(box => {
+    let r=0,g=0,b=0;
+    for (const p of box.pixels) { r+=p[0]; g+=p[1]; b+=p[2]; }
+    const n = box.pixels.length;
+    return [Math.round(r/n), Math.round(g/n), Math.round(b/n)];
+  });
+  return palette.length ? palette : [[0,0,0]];
+}
+
+function nearestColorIndex(palette, r, g, b) {
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < palette.length; i++) {
+    const p = palette[i];
+    const dr = p[0]-r, dg = p[1]-g, db = p[2]-b;
+    const d = dr*dr+dg*dg+db*db;
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+
+function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
+
+function encodeGIF({ width, height, palette, frames, loop }) {
+  const bytes = [];
+  function pushStr(s) { for (let i=0;i<s.length;i++) bytes.push(s.charCodeAt(i)); }
+  function push16(v) { bytes.push(v & 0xFF, (v>>8) & 0xFF); }
+  const palSize = nextPow2(Math.max(2, palette.length));
+  const colorBits = Math.log2(palSize);
+
+  pushStr("GIF89a");
+  push16(width); push16(height);
+  bytes.push(0x80 | ((colorBits-1) << 4) | (colorBits-1));
+  bytes.push(0); bytes.push(0);
+  for (let i = 0; i < palSize; i++) {
+    const c = palette[i] || [0,0,0];
+    bytes.push(c[0], c[1], c[2]);
+  }
+  bytes.push(0x21, 0xFF, 0x0B);
+  pushStr("NETSCAPE2.0");
+  bytes.push(3, 1);
+  push16(loop === undefined ? 0 : loop);
+  bytes.push(0);
+
+  for (const frame of frames) {
+    bytes.push(0x21, 0xF9, 4);
+    bytes.push((frame.disposal !== undefined ? frame.disposal : 1) << 2);
+    push16(Math.max(1, Math.round((frame.delay || 100) / 10)));
+    bytes.push(0); bytes.push(0);
+
+    bytes.push(0x2C);
+    push16(0); push16(0);
+    push16(width); push16(height);
+    bytes.push(0);
+
+    const minCodeSize = Math.max(2, colorBits);
+    bytes.push(minCodeSize);
+    const lzwBytes = lzwEncode(minCodeSize, frame.indices);
+    let pos = 0;
+    while (pos < lzwBytes.length) {
+      const chunk = lzwBytes.slice(pos, pos+255);
+      bytes.push(chunk.length);
+      for (const b of chunk) bytes.push(b);
+      pos += 255;
+    }
+    bytes.push(0);
+  }
+  bytes.push(0x3B);
+  return new Uint8Array(bytes);
+}
+
+function decodeGIF(buf) {
+  const data = new Uint8Array(buf);
+  let pos = 0;
+  function readByte() { return data[pos++]; }
+  function readU16() { const v = data[pos] | (data[pos+1] << 8); pos += 2; return v; }
+  function readStr(n) { let s = ""; for (let i=0;i<n;i++) s += String.fromCharCode(data[pos+i]); pos += n; return s; }
+
+  const header = readStr(6);
+  if (header.slice(0,3) !== "GIF") throw new Error("Not a GIF file");
+  const width = readU16();
+  const height = readU16();
+  const packed = readByte();
+  const gctFlag = (packed & 0x80) !== 0;
+  const gctSize = 2 << (packed & 0x07);
+  readByte(); readByte();
+
+  let gct = null;
+  if (gctFlag) {
+    gct = [];
+    for (let i = 0; i < gctSize; i++) gct.push([readByte(), readByte(), readByte()]);
+  }
+
+  let loop = 0;
+  const frames = [];
+  let gceDelay = 100, gceDisposal = 0, gceTransparentIndex = -1, gceTransparent = false;
+
+  while (pos < data.length) {
+    const sep = readByte();
+    if (sep === 0x21) {
+      const label = readByte();
+      if (label === 0xFF) {
+        const blockSize = readByte();
+        const appId = readStr(blockSize);
+        let sub;
+        while ((sub = readByte()) !== 0) {
+          const subData = [];
+          for (let i=0;i<sub;i++) subData.push(readByte());
+          if (appId.startsWith("NETSCAPE") && subData[0] === 1) loop = subData[1] | (subData[2] << 8);
+        }
+      } else if (label === 0xF9) {
+        readByte();
+        const p = readByte();
+        gceDisposal = (p >> 2) & 0x07;
+        gceTransparent = (p & 0x01) !== 0;
+        gceDelay = readU16() * 10;
+        gceTransparentIndex = readByte();
+        readByte();
+      } else {
+        let sub;
+        while ((sub = readByte()) !== 0) pos += sub;
+      }
+    } else if (sep === 0x2C) {
+      const left = readU16(), top = readU16(), w = readU16(), h = readU16();
+      const p = readByte();
+      const lctFlag = (p & 0x80) !== 0;
+      const interlaced = (p & 0x40) !== 0;
+      const lctSize = 2 << (p & 0x07);
+      let lct = null;
+      if (lctFlag) {
+        lct = [];
+        for (let i = 0; i < lctSize; i++) lct.push([readByte(), readByte(), readByte()]);
+      }
+      const minCodeSize = readByte();
+      const subBytes = [];
+      let sub;
+      while ((sub = readByte()) !== 0) for (let i=0;i<sub;i++) subBytes.push(readByte());
+      const indices = lzwDecode(minCodeSize, subBytes);
+      const palette = lct || gct || [[0,0,0]];
+
+      let orderedIndices = indices;
+      if (interlaced) {
+        orderedIndices = new Array(w*h);
+        const passes = [[0,8],[4,8],[2,4],[1,2]];
+        let srcRow = 0;
+        for (const [start, step] of passes) {
+          for (let y = start; y < h; y += step) {
+            for (let x = 0; x < w; x++) orderedIndices[y*w+x] = indices[srcRow*w+x];
+            srcRow++;
+          }
+        }
+      }
+      frames.push({ left, top, width: w, height: h, indices: orderedIndices, palette,
+        delay: gceDelay, disposal: gceDisposal, transparent: gceTransparent, transparentIndex: gceTransparentIndex });
+      gceDelay = 100; gceDisposal = 0; gceTransparent = false; gceTransparentIndex = -1;
+    } else if (sep === 0x3B) {
+      break;
+    } else {
+      break;
+    }
+  }
+
+  const composited = [];
+  let canvas = new Uint8ClampedArray(width*height*4);
+  let prevSnapshot = null;
+  let prevDisposal = 0, prevLeft=0, prevTop=0, prevW=0, prevH=0;
+
+  for (const f of frames) {
+    if (prevDisposal === 3 && prevSnapshot) {
+      canvas = prevSnapshot.slice();
+    } else if (prevDisposal === 2) {
+      for (let y = prevTop; y < prevTop+prevH; y++) {
+        for (let x = prevLeft; x < prevLeft+prevW; x++) {
+          const idx = (y*width+x)*4;
+          canvas[idx]=0; canvas[idx+1]=0; canvas[idx+2]=0; canvas[idx+3]=0;
+        }
+      }
+    }
+    if (f.disposal === 3) prevSnapshot = canvas.slice();
+
+    for (let y = 0; y < f.height; y++) {
+      for (let x = 0; x < f.width; x++) {
+        const colorIndex = f.indices[y*f.width+x];
+        if (f.transparent && colorIndex === f.transparentIndex) continue;
+        const c = f.palette[colorIndex] || [0,0,0];
+        const dx = f.left+x, dy = f.top+y;
+        if (dx>=width||dy>=height) continue;
+        const dstIdx = (dy*width+dx)*4;
+        canvas[dstIdx]=c[0]; canvas[dstIdx+1]=c[1]; canvas[dstIdx+2]=c[2]; canvas[dstIdx+3]=255;
+      }
+    }
+    composited.push({ data: canvas.slice(), delay: f.delay });
+    prevDisposal = f.disposal; prevLeft=f.left; prevTop=f.top; prevW=f.width; prevH=f.height;
+  }
+  return { width, height, loop, frames: composited };
+}
+
+/* =========================================================================
+   UI wiring
+   ========================================================================= */
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const controls = document.getElementById('controls');
+const imgOriginal = document.getElementById('imgOriginal');
+const imgCompressed = document.getElementById('imgCompressed');
+const renderingMsg = document.getElementById('renderingMsg');
+const colorsInput = document.getElementById('colors');
+const colorsOut = document.getElementById('colorsOut');
+const scaleInput = document.getElementById('scale');
+const scaleOut = document.getElementById('scaleOut');
+const framesInput = document.getElementById('frames');
+const framesOut = document.getElementById('framesOut');
+const originalSizeLabel = document.getElementById('originalSize');
+const originalDimsLabel = document.getElementById('originalDims');
+const compressedSizeLabel = document.getElementById('compressedSize');
+const compressedDimsLabel = document.getElementById('compressedDims');
+const downloadBtn = document.getElementById('downloadBtn');
+const statusMsg = document.getElementById('statusMsg');
+
+let decoded = null; // { width, height, loop, frames: [{data, delay}] }
+let originalBytes = 0;
+let latestBlob = null;
+let statusTimer = null;
+let debounceTimer = null;
+let renderToken = 0;
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--border-stronger)'; });
+dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = ''; });
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.style.borderColor = '';
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+function loadFile(file) {
+  originalBytes = file.size;
+  imgOriginal.src = URL.createObjectURL(file);
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      decoded = decodeGIF(reader.result);
+    } catch (err) {
+      alert('Could not read that file as a GIF: ' + err.message);
+      return;
+    }
+    controls.style.display = 'block';
+    statusMsg.style.display = 'none';
+    originalSizeLabel.textContent = formatBytes(originalBytes);
+    originalDimsLabel.textContent = decoded.width + ' x ' + decoded.height + ' px · ' + decoded.frames.length + ' frames';
+    render();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+colorsInput.addEventListener('input', () => {
+  colorsOut.textContent = colorsInput.value;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(render, 150);
+});
+scaleInput.addEventListener('input', () => {
+  scaleOut.textContent = scaleInput.value + '%';
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(render, 150);
+});
+framesInput.addEventListener('input', () => {
+  framesOut.textContent = framesInput.value + '%';
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(render, 150);
+});
+
+function resizeFrameData(srcData, srcW, srcH, dstW, dstH) {
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = srcW; srcCanvas.height = srcH;
+  srcCanvas.getContext('2d').putImageData(new ImageData(srcData, srcW, srcH), 0, 0);
+  const dstCanvas = document.createElement('canvas');
+  dstCanvas.width = dstW; dstCanvas.height = dstH;
+  const dctx = dstCanvas.getContext('2d');
+  dctx.drawImage(srcCanvas, 0, 0, dstW, dstH);
+  return dctx.getImageData(0, 0, dstW, dstH).data;
+}
+
+async function render() {
+  if (!decoded) return;
+  const myToken = ++renderToken;
+  renderingMsg.style.display = 'flex';
+
+  // Let the "Rendering…" message paint before the heavy work starts.
+  await new Promise(r => setTimeout(r, 0));
+  if (myToken !== renderToken) return;
+
+  const maxColors = parseInt(colorsInput.value, 10);
+  const scalePct = parseInt(scaleInput.value, 10) / 100;
+  const framesPct = parseInt(framesInput.value, 10) / 100;
+
+  const totalFrames = decoded.frames.length;
+  const keep = Math.max(1, Math.round(totalFrames * framesPct));
+  const dstW = Math.max(1, Math.round(decoded.width * scalePct));
+  const dstH = Math.max(1, Math.round(decoded.height * scalePct));
+
+  // Pick evenly spaced frames, summing delays of the frames each one stands in for.
+  const boundaries = [];
+  for (let i = 0; i <= keep; i++) boundaries.push(Math.floor(i * totalFrames / keep));
+
+  const scaledFrames = [];
+  for (let i = 0; i < keep; i++) {
+    const start = boundaries[i], end = boundaries[i+1];
+    const rep = decoded.frames[start];
+    let delaySum = 0;
+    for (let j = start; j < end; j++) delaySum += decoded.frames[j].delay;
+    const data = (dstW === decoded.width && dstH === decoded.height)
+      ? rep.data
+      : resizeFrameData(rep.data, decoded.width, decoded.height, dstW, dstH);
+    scaledFrames.push({ data, delay: delaySum || rep.delay });
+  }
+
+  // Sample pixels across the scaled frames to build a shared palette.
+  const samples = [];
+  const targetSamples = 20000;
+  const totalPixels = scaledFrames.length * dstW * dstH;
+  const stride = Math.max(1, Math.floor(totalPixels / targetSamples));
+  let counter = 0;
+  for (const f of scaledFrames) {
+    for (let p = 0; p < dstW*dstH; p++) {
+      if (counter % stride === 0) {
+        const idx = p*4;
+        samples.push(f.data[idx], f.data[idx+1], f.data[idx+2]);
+      }
+      counter++;
+    }
+  }
+  const palette = quantizeMedianCut(samples, maxColors);
+
+  const cache = new Map();
+  function paletteIndexFor(r, g, b) {
+    const key = (r<<16)|(g<<8)|b;
+    let idx = cache.get(key);
+    if (idx === undefined) {
+      idx = nearestColorIndex(palette, r, g, b);
+      cache.set(key, idx);
+    }
+    return idx;
+  }
+
+  const gifFrames = scaledFrames.map(f => {
+    const indices = new Array(dstW*dstH);
+    for (let p = 0; p < dstW*dstH; p++) {
+      const idx = p*4;
+      indices[p] = paletteIndexFor(f.data[idx], f.data[idx+1], f.data[idx+2]);
+    }
+    return { indices, delay: f.delay, disposal: 1 };
+  });
+
+  if (myToken !== renderToken) return;
+
+  const gifBytes = encodeGIF({ width: dstW, height: dstH, palette, frames: gifFrames, loop: decoded.loop });
+  const blob = new Blob([gifBytes], { type: 'image/gif' });
+  latestBlob = blob;
+
+  imgCompressed.src = URL.createObjectURL(blob);
+  compressedSizeLabel.textContent = formatBytes(blob.size);
+  compressedDimsLabel.textContent = dstW + ' x ' + dstH + ' px · ' + gifFrames.length + ' frames';
+  renderingMsg.style.display = 'none';
+}
+
+downloadBtn.addEventListener('click', () => {
+  if (!latestBlob) return;
+  const url = URL.createObjectURL(latestBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'compressed.gif';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  statusMsg.style.display = 'flex';
+  if (statusTimer) clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { statusMsg.style.display = 'none'; }, 4000);
+});
+</script>
+</div>

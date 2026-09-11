@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shape Cutter — mask an animated GIF</title>
+<style>
+  :root{
+    --mat: #16302b;
+    --mat-grid: #1f4038;
+    --mat-grid-major: #295349;
+    --kraft: #efe6d3;
+    --kraft-edge: #dcd0ac;
+    --ink: #2b2013;
+    --ink-soft: #6b5c40;
+    --accent: #e3a73b;
+    --accent-dark: #b9791c;
+    --hole: #c1502e;
+    --panel-shadow: 0 18px 40px rgba(0,0,0,0.35);
+    --mono: ui-monospace, "Roboto Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:var(--sans);
+    color:var(--kraft);
+    background-color:var(--mat);
+    background-image:
+      repeating-linear-gradient(0deg, var(--mat-grid) 0 1px, transparent 1px 25px),
+      repeating-linear-gradient(90deg, var(--mat-grid) 0 1px, transparent 1px 25px),
+      repeating-linear-gradient(0deg, var(--mat-grid-major) 0 1px, transparent 1px 125px),
+      repeating-linear-gradient(90deg, var(--mat-grid-major) 0 1px, transparent 1px 125px);
+    min-height:100vh;
+    padding:32px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{margin-bottom:26px;}
+  header h1{
+    font-family:var(--mono);
+    font-size:clamp(28px,4vw,42px);
+    letter-spacing:0.5px;
+    margin:0 0 8px;
+    color:#fbf6e9;
+  }
+  header h1 .scissor{color:var(--accent);}
+  header p{margin:0;color:#b9d3cb;max-width:640px;line-height:1.5;font-size:15px;}
+
+  .layout{display:grid;grid-template-columns: 380px 1fr;gap:22px;align-items:start;}
+  @media (max-width: 880px){ .layout{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--kraft);
+    border:1px solid var(--kraft-edge);
+    border-radius:10px;
+    box-shadow:var(--panel-shadow);
+    color:var(--ink);
+    padding:20px;
+  }
+  .panel + .panel{margin-top:18px;}
+  .panel h2{
+    font-family:var(--mono);
+    font-size:14px;
+    text-transform:none;
+    letter-spacing:0.3px;
+    margin:0 0 14px;
+    padding-bottom:10px;
+    border-bottom:1px dashed var(--kraft-edge);
+    color:var(--ink);
+  }
+
+  .dropzone{
+    border:2px dashed var(--ink-soft);
+    border-radius:8px;
+    padding:22px 14px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+    background:rgba(255,255,255,0.25);
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent-dark); background:rgba(255,255,255,0.45);}
+  .dropzone input{display:none;}
+  .dropzone .big{font-size:15px;font-weight:600;margin-bottom:4px;}
+  .dropzone .small{font-size:12px;color:var(--ink-soft);}
+
+  .file-meta{margin-top:10px;font-size:12px;color:var(--ink-soft);}
+
+  .shape-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+  .shape-btn{
+    aspect-ratio:1;
+    background:#fff;
+    border:2px solid var(--kraft-edge);
+    border-radius:8px;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    padding:8px;
+    transition:border-color .12s, transform .08s;
+  }
+  .shape-btn:hover{transform:translateY(-1px);}
+  .shape-btn.active{border-color:var(--accent-dark); box-shadow:0 0 0 2px var(--accent) inset;}
+  .shape-btn svg{width:100%;height:100%;fill:var(--ink);}
+
+  details.custom-mask{margin-top:6px;}
+  details.custom-mask summary{cursor:pointer;font-size:13px;color:var(--ink-soft);margin-bottom:8px;}
+  textarea.svgcode{
+    width:100%;min-height:80px;font-family:var(--mono);font-size:11px;
+    border:1px solid var(--kraft-edge);border-radius:6px;padding:8px;resize:vertical;
+    background:#fffdf7;
+  }
+  .row{display:flex;gap:8px;margin-top:8px;}
+  .row > *{flex:1;}
+
+  label.field{display:block;margin-bottom:12px;font-size:12px;color:var(--ink-soft);}
+  label.field .flabel{display:flex;justify-content:space-between;margin-bottom:4px;font-family:var(--mono);}
+  input[type=range]{width:100%;accent-color:var(--accent-dark);}
+  select, input[type=number]{
+    width:100%;padding:6px 8px;border:1px solid var(--kraft-edge);border-radius:6px;
+    background:#fffdf7;color:var(--ink);font-family:var(--sans);font-size:13px;
+  }
+
+  .checkbox-row{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px;}
+
+  button.btn{
+    font-family:var(--sans);
+    font-weight:600;
+    font-size:14px;
+    padding:10px 16px;
+    border-radius:7px;
+    border:none;
+    cursor:pointer;
+    transition:filter .1s, transform .08s;
+  }
+  button.btn:hover{filter:brightness(1.06);}
+  button.btn:active{transform:translateY(1px);}
+  button.btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .btn-primary{background:var(--accent);color:#2b1c05;}
+  .btn-primary:hover{background:var(--accent-dark);color:#fff;}
+  .btn-ghost{background:transparent;border:1px solid var(--ink-soft);color:var(--ink);}
+  .btn-block{width:100%;}
+
+  .preview-shell{
+    background:var(--kraft);
+    border:1px solid var(--kraft-edge);
+    border-radius:10px;
+    box-shadow:var(--panel-shadow);
+    padding:20px;
+  }
+  .checker-frame{
+    border-radius:8px;
+    overflow:hidden;
+    display:inline-block;
+    background-image:
+      repeating-conic-gradient(#d8d8d8 0% 25%, #f4f4f4 0% 50%);
+    background-size:22px 22px;
+    line-height:0;
+    max-width:100%;
+  }
+  canvas#previewCanvas{
+    display:block;
+    max-width:100%;
+    height:auto;
+  }
+  .placeholder{
+    width:100%;
+    aspect-ratio:4/3;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink-soft);
+    font-size:14px;
+    text-align:center;
+    padding:20px;
+  }
+
+  .export-row{display:flex;flex-wrap:wrap;gap:14px;margin-top:18px;align-items:flex-end;}
+  .export-row .field{flex:1;min-width:120px;margin-bottom:0;}
+
+  .progress-wrap{margin-top:14px;background:#e4d9bb;border-radius:6px;overflow:hidden;height:10px;display:none;}
+  .progress-wrap.active{display:block;}
+  .progress-bar{height:100%;width:0%;background:var(--accent-dark);transition:width .15s;}
+
+  .status-msg{margin-top:12px;font-size:13px;line-height:1.5;}
+  .status-msg.error{color:#8a2f1c;}
+  .status-msg.ok{color:#2c5a2e;}
+
+  .result-card{margin-top:16px;padding:14px;border:1px dashed var(--kraft-edge);border-radius:8px;background:rgba(255,255,255,0.35);display:none;}
+  .result-card.active{display:block;}
+  .result-card img{max-width:100%;border-radius:6px;display:block;margin-bottom:10px;background-image:repeating-conic-gradient(#d8d8d8 0% 25%, #f4f4f4 0% 50%);background-size:22px 22px;}
+
+  .hint{font-size:12px;color:var(--ink-soft);margin-top:10px;line-height:1.5;}
+  footer{margin-top:30px;text-align:center;color:#7c968d;font-size:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Shape Cutter <span class="scissor">✂</span></h1>
+    <p>Upload an animated GIF, lay an SVG shape over it as a stencil, and everything outside the shape becomes transparent. Preview it live, then cut a real transparent GIF to download.</p>
+  </header>
+
+  <div class="layout">
+    <div class="controls">
+
+      <div class="panel">
+        <h2>1. Upload GIF</h2>
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" accept="image/gif">
+          <div class="big">Click or drop a .gif here</div>
+          <div class="small">Animated GIFs work best</div>
+        </label>
+        <div class="file-meta" id="fileMeta"></div>
+      </div>
+
+      <div class="panel">
+        <h2>2. Choose a stencil</h2>
+        <div class="shape-grid" id="shapeGrid"></div>
+
+        <details class="custom-mask">
+          <summary>Use a custom SVG shape instead</summary>
+          <textarea class="svgcode" id="svgCode" placeholder="Paste SVG markup, e.g. &lt;svg viewBox='0 0 100 100'&gt;&lt;path d='...'/&gt;&lt;/svg&gt;"></textarea>
+          <div class="row">
+            <button class="btn btn-ghost" id="applySvgBtn">Use this SVG</button>
+            <label class="btn btn-ghost" style="text-align:center;cursor:pointer;">
+              Upload .svg
+              <input type="file" id="svgFileInput" accept=".svg,image/svg+xml" style="display:none;">
+            </label>
+          </div>
+        </details>
+      </div>
+
+      <div class="panel">
+        <h2>3. Fit the shape</h2>
+        <label class="field">
+          <span class="flabel"><span>Scale</span><span id="scaleVal">100%</span></span>
+          <input type="range" id="scaleSlider" min="10" max="250" value="100">
+        </label>
+        <label class="field">
+          <span class="flabel"><span>Horizontal position</span><span id="xVal">0</span></span>
+          <input type="range" id="xSlider" min="-100" max="100" value="0">
+        </label>
+        <label class="field">
+          <span class="flabel"><span>Vertical position</span><span id="yVal">0</span></span>
+          <input type="range" id="ySlider" min="-100" max="100" value="0">
+        </label>
+        <label class="field">
+          <span class="flabel"><span>Rotation</span><span id="rotVal">0°</span></span>
+          <input type="range" id="rotSlider" min="0" max="360" value="0">
+        </label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="invertCheck">
+          <label for="invertCheck">Invert — punch a hole with the shape instead of keeping only what's inside it</label>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn btn-ghost btn-block" id="resetTransformBtn">Reset fit</button>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="preview-col">
+      <div class="preview-shell">
+        <h2 style="font-family:var(--mono);color:var(--ink);font-size:14px;margin:0 0 14px;">Preview</h2>
+        <div class="checker-frame" id="checkerFrame">
+          <div class="placeholder" id="placeholder">Upload a GIF on the left to see it here.</div>
+          <canvas id="previewCanvas" style="display:none;"></canvas>
+        </div>
+
+        <div class="export-row">
+          <label class="field">
+            <span class="flabel"><span>Playback speed</span><span id="speedVal">100%</span></span>
+            <input type="range" id="speedSlider" min="50" max="200" value="100">
+          </label>
+          <label class="field">
+            <span class="flabel"><span>Output size</span></span>
+            <select id="sizeSelect">
+              <option value="1">Original</option>
+              <option value="0.75">75%</option>
+              <option value="0.5" selected>50%</option>
+              <option value="0.25">25%</option>
+            </select>
+          </label>
+        </div>
+        <div class="hint" id="gifInfo"></div>
+
+        <button class="btn btn-primary btn-block" id="exportBtn" style="margin-top:16px;" disabled>Cut &amp; download transparent GIF</button>
+
+        <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="status-msg" id="statusMsg"></div>
+
+        <div class="result-card" id="resultCard">
+          <img id="resultImg" alt="Masked GIF result">
+          <a class="btn btn-primary" id="downloadLink" download="shape-cut.gif">Download GIF</a>
+        </div>
+
+        <p class="hint">GIF transparency is all-or-nothing (no soft edges), so the exported file will have a slightly harder edge than the live preview above. The export uses every real frame decoded from your GIF, so it matches the original animation exactly. Rendering happens entirely in your browser — nothing is uploaded anywhere.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>Everything runs locally in your browser. Encoding uses gif.js, loaded from cdnjs when you export.</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Preset shapes (viewBox 0 0 100 100) ----------
+  const PRESETS = {
+    circle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><circle cx="50" cy="50" r="45"/></svg>`,
+    square: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect x="8" y="8" width="84" height="84" rx="20" ry="20"/></svg>`,
+    heart: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><path d="M50,88 C20,65 5,45 5,28 C5,12 18,2 32,2 C40,2 47,6 50,14 C53,6 60,2 68,2 C82,2 95,12 95,28 C95,45 80,65 50,88 Z"/></svg>`,
+    star: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><path d="M50,5 L60.58,35.44 L92.75,36.09 L67.12,55.56 L76.45,86.41 L50,68 L23.55,86.41 L32.88,55.56 L7.2,36.09 L39.42,35.44 Z"/></svg>`,
+    hexagon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><path d="M50,5 L88.97,27.5 L88.97,72.5 L50,95 L11.03,72.5 L11.03,27.5 Z"/></svg>`,
+    blob: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><path d="M50,10 C70,5 95,25 90,50 C95,75 70,95 50,90 C30,95 5,75 10,50 C5,25 30,5 50,10 Z"/></svg>`,
+    bubble: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect x="5" y="5" width="90" height="70" rx="16" ry="16"/><polygon points="20,70 15,95 42,70"/></svg>`,
+    arrow: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><polygon points="8,35 60,35 60,15 95,50 60,85 60,65 8,65"/></svg>`
+  };
+  const PRESET_LABELS = {circle:"Circle",square:"Rounded square",heart:"Heart",star:"Star",hexagon:"Hexagon",blob:"Blob",bubble:"Speech bubble",arrow:"Arrow"};
+
+  // ---------- Minimal GIF89a decoder ----------
+  // We decode frames ourselves instead of relying on a browser-driven
+  // <img> to animate in the background: browsers are free to pause GIF
+  // animation on images that aren't genuinely visible/rendered, which is
+  // why sampling a hidden <img> over time produced a frozen preview and a
+  // frozen export. Decoding gives exact frames and delays with no
+  // dependency on browser timing at all.
+  function parseGIF(buffer){
+    const bytes = new Uint8Array(buffer);
+    let pos = 0;
+    const readByte = () => bytes[pos++];
+    const readBytes = n => { const s = bytes.subarray(pos, pos + n); pos += n; return s; };
+    const readUint16 = () => { const v = bytes[pos] | (bytes[pos + 1] << 8); pos += 2; return v; };
+    const readColorTable = size => {
+      const table = new Array(size);
+      for (let i = 0; i < size; i++) table[i] = [readByte(), readByte(), readByte()];
+      return table;
+    };
+    const readSubBlocks = () => {
+      const chunks = [];
+      let total = 0, size;
+      while ((size = readByte()) !== 0) { chunks.push(readBytes(size)); total += size; }
+      const out = new Uint8Array(total);
+      let o = 0;
+      for (const c of chunks) { out.set(c, o); o += c.length; }
+      return out;
+    };
+
+    const sig = String.fromCharCode.apply(null, readBytes(6));
+    if (sig !== "GIF87a" && sig !== "GIF89a") throw new Error("Not a GIF file");
+
+    const width = readUint16();
+    const height = readUint16();
+    const packed = readByte();
+    const gctFlag = (packed & 0x80) !== 0;
+    const gctSize = 2 << (packed & 0x07);
+    readByte(); // background color index
+    readByte(); // pixel aspect ratio
+    const gct = gctFlag ? readColorTable(gctSize) : null;
+
+    function lzwDecode(minCodeSize, data, pixelCount){
+      const CLEAR = 1 << minCodeSize, EOI = CLEAR + 1;
+      let dict, nextCode, codeSize;
+      const reset = () => {
+        dict = new Array(CLEAR);
+        for (let i = 0; i < CLEAR; i++) dict[i] = [i];
+        dict[CLEAR] = null; dict[EOI] = null;
+        nextCode = EOI + 1;
+        codeSize = minCodeSize + 1;
+      };
+      reset();
+      const output = new Uint8Array(pixelCount);
+      let outPos = 0, bitBuffer = 0, bitCount = 0, dataPos = 0;
+      const readCode = () => {
+        while (bitCount < codeSize) {
+          bitBuffer |= (dataPos < data.length ? data[dataPos++] : 0) << bitCount;
+          bitCount += 8;
+        }
+        const code = bitBuffer & ((1 << codeSize) - 1);
+        bitBuffer >>= codeSize; bitCount -= codeSize;
+        return code;
+      };
+      let prev = null;
+      while (outPos < pixelCount && dataPos <= data.length) {
+        const code = readCode();
+        if (code === CLEAR) { reset(); prev = null; continue; }
+        if (code === EOI) break;
+        let entry;
+        if (dict[code]) entry = dict[code];
+        else if (code === nextCode && prev) entry = prev.concat([prev[0]]);
+        else break;
+        for (let i = 0; i < entry.length && outPos < pixelCount; i++) output[outPos++] = entry[i];
+        if (prev && nextCode < 4096) {
+          dict[nextCode++] = prev.concat([entry[0]]);
+          if (nextCode === (1 << codeSize) && codeSize < 12) codeSize++;
+        }
+        prev = entry;
+      }
+      return output;
+    }
+
+    function getRegion(buf, w, left, top, rw, rh){
+      const region = new Uint8ClampedArray(rw * rh * 4);
+      for (let y = 0; y < rh; y++) {
+        const srcOff = ((top + y) * w + left) * 4;
+        region.set(buf.subarray(srcOff, srcOff + rw * 4), y * rw * 4);
+      }
+      return region;
+    }
+    function putRegion(buf, w, saved){
+      for (let y = 0; y < saved.height; y++) {
+        const dstOff = ((saved.top + y) * w + saved.left) * 4;
+        buf.set(saved.data.subarray(y * saved.width * 4, (y + 1) * saved.width * 4), dstOff);
+      }
+    }
+    function clearRegion(buf, w, left, top, rw, rh){
+      for (let y = 0; y < rh; y++) {
+        const off = ((top + y) * w + left) * 4;
+        buf.fill(0, off, off + rw * 4);
+      }
+    }
+
+    const canvasBuf = new Uint8ClampedArray(width * height * 4);
+    const frames = [];
+    let loopCount = 0;
+    let gceDisposal = 0, gceTransparent = -1, gceDelay = 10;
+
+    while (pos < bytes.length) {
+      const blockType = readByte();
+      if (blockType === 0x21) {
+        const label = readByte();
+        if (label === 0xF9) {
+          readByte(); // block size (4)
+          const p = readByte();
+          gceDisposal = (p >> 2) & 0x07;
+          gceDelay = readUint16();
+          const transFlag = (p & 0x01) !== 0;
+          const transIdx = readByte();
+          gceTransparent = transFlag ? transIdx : -1;
+          readByte(); // block terminator
+        } else if (label === 0xFF) {
+          const blockSize = readByte();
+          const appId = String.fromCharCode.apply(null, readBytes(blockSize));
+          const sub = readSubBlocks();
+          if (appId.indexOf("NETSCAPE") === 0 && sub.length >= 3) loopCount = sub[1] | (sub[2] << 8);
+        } else {
+          readSubBlocks();
+        }
+      } else if (blockType === 0x2C) {
+        const imgLeft = readUint16(), imgTop = readUint16();
+        const imgWidth = readUint16(), imgHeight = readUint16();
+        const p = readByte();
+        const localCT = (p & 0x80) !== 0;
+        const interlaced = (p & 0x40) !== 0;
+        const colorTable = localCT ? readColorTable(2 << (p & 0x07)) : gct;
+        const minCodeSize = readByte();
+        const data = readSubBlocks();
+        const indices = lzwDecode(minCodeSize, data, imgWidth * imgHeight);
+
+        if (frames.length > 0) {
+          const prev = frames[frames.length - 1];
+          if (prev.disposalType === 2) clearRegion(canvasBuf, width, prev.left, prev.top, prev.width, prev.height);
+          else if (prev.disposalType === 3 && prev.savedRegion) putRegion(canvasBuf, width, prev.savedRegion);
+        }
+
+        const savedRegion = gceDisposal === 3
+          ? { left: imgLeft, top: imgTop, width: imgWidth, height: imgHeight, data: getRegion(canvasBuf, width, imgLeft, imgTop, imgWidth, imgHeight) }
+          : null;
+
+        for (let row = 0; row < imgHeight; row++) {
+          let destRow = row;
+          if (interlaced) {
+            // interlace pass mapping: 0,8,16.. / 4,12,20.. / 2,6,10.. / 1,3,5..
+            const passStarts = [0, 4, 2, 1], passSteps = [8, 8, 4, 2];
+            let r = row, passIdx = 0, cum = 0;
+            for (; passIdx < 4; passIdx++) {
+              const count = Math.ceil((imgHeight - passStarts[passIdx]) / passSteps[passIdx]);
+              if (r < count) { destRow = passStarts[passIdx] + r * passSteps[passIdx]; break; }
+              r -= count;
+            }
+          }
+          for (let col = 0; col < imgWidth; col++) {
+            const idx = indices[row * imgWidth + col];
+            if (idx === gceTransparent) continue;
+            const color = colorTable && colorTable[idx];
+            if (!color) continue;
+            const di = ((imgTop + destRow) * width + (imgLeft + col)) * 4;
+            canvasBuf[di] = color[0]; canvasBuf[di + 1] = color[1]; canvasBuf[di + 2] = color[2]; canvasBuf[di + 3] = 255;
+          }
+        }
+
+        const effectiveDelay = gceDelay <= 1 ? 100 : gceDelay * 10;
+        frames.push({
+          imageData: new Uint8ClampedArray(canvasBuf),
+          delay: effectiveDelay,
+          disposalType: gceDisposal,
+          left: imgLeft, top: imgTop, width: imgWidth, height: imgHeight,
+          savedRegion
+        });
+
+        gceDisposal = 0; gceTransparent = -1; gceDelay = 10;
+      } else if (blockType === 0x3B) {
+        break;
+      } else {
+        break;
+      }
+    }
+
+    if (frames.length === 0) throw new Error("No image frames found in this GIF.");
+    return { width, height, frames, loopCount };
+  }
+
+  // ---------- State ----------
+  const state = {
+    maskImg: null,
+    maskSvgText: PRESETS.circle,
+    activePreset: "circle",
+    scale: 100, x: 0, y: 0, rotation: 0, invert: false,
+    naturalW: 0, naturalH: 0,
+    gifLoaded: false,
+    frames: [],
+    loopCount: 0
+  };
+
+  // off-screen canvas holding the current raw (unmasked) decoded frame
+  const sourceCanvas = document.createElement("canvas");
+  const sctx = sourceCanvas.getContext("2d");
+
+  // ---------- DOM refs ----------
+  const $ = id => document.getElementById(id);
+  const dropzone = $("dropzone"), fileInput = $("fileInput"), fileMeta = $("fileMeta");
+  const shapeGrid = $("shapeGrid");
+  const svgCode = $("svgCode"), applySvgBtn = $("applySvgBtn"), svgFileInput = $("svgFileInput");
+  const scaleSlider = $("scaleSlider"), xSlider = $("xSlider"), ySlider = $("ySlider"), rotSlider = $("rotSlider");
+  const scaleVal = $("scaleVal"), xVal = $("xVal"), yVal = $("yVal"), rotVal = $("rotVal");
+  const invertCheck = $("invertCheck"), resetTransformBtn = $("resetTransformBtn");
+  const placeholder = $("placeholder"), previewCanvas = $("previewCanvas");
+  const speedSlider = $("speedSlider"), speedVal = $("speedVal"), sizeSelect = $("sizeSelect"), gifInfo = $("gifInfo");
+  const exportBtn = $("exportBtn"), progressWrap = $("progressWrap"), progressBar = $("progressBar");
+  const statusMsg = $("statusMsg"), resultCard = $("resultCard"), resultImg = $("resultImg"), downloadLink = $("downloadLink");
+
+  const pctx = previewCanvas.getContext("2d");
+
+  // ---------- Build preset shape buttons ----------
+  Object.keys(PRESETS).forEach(key => {
+    const btn = document.createElement("button");
+    btn.className = "shape-btn" + (key === state.activePreset ? " active" : "");
+    btn.title = PRESET_LABELS[key];
+    btn.innerHTML = PRESETS[key].replace("<svg ", '<svg aria-hidden="true" ');
+    btn.addEventListener("click", () => {
+      state.activePreset = key;
+      setMaskFromSvgText(PRESETS[key]);
+      [...shapeGrid.children].forEach(c => c.classList.remove("active"));
+      btn.classList.add("active");
+    });
+    shapeGrid.appendChild(btn);
+  });
+
+  // ---------- Mask loading ----------
+  function setMaskFromSvgText(svgText){
+    state.maskSvgText = svgText;
+    const uri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
+    const img = new Image();
+    img.onload = () => { state.maskImg = img; };
+    img.onerror = () => { showStatus("Couldn't parse that SVG.", "error"); };
+    img.src = uri;
+  }
+  setMaskFromSvgText(PRESETS.circle);
+
+  applySvgBtn.addEventListener("click", () => {
+    let text = svgCode.value.trim();
+    if (!text) return;
+    if (!/^<svg[\s>]/i.test(text)) {
+      text = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">${text}</svg>`;
+    }
+    [...shapeGrid.children].forEach(c => c.classList.remove("active"));
+    setMaskFromSvgText(text);
+  });
+
+  svgFileInput.addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      svgCode.value = reader.result;
+      [...shapeGrid.children].forEach(c => c.classList.remove("active"));
+      setMaskFromSvgText(reader.result);
+    };
+    reader.readAsText(f);
+  });
+
+  // ---------- GIF loading ----------
+  function loadGifFile(file){
+    if (!file) return;
+    if (!/gif/i.test(file.type) && !/\.gif$/i.test(file.name)) {
+      showStatus("Please choose a .gif file.", "error");
+      return;
+    }
+    showStatus("Decoding GIF…", "");
+    const reader = new FileReader();
+    reader.onload = () => {
+      let parsed;
+      try {
+        parsed = parseGIF(reader.result);
+      } catch (err) {
+        console.error(err);
+        showStatus("Couldn't read that GIF: " + err.message, "error");
+        return;
+      }
+      state.naturalW = parsed.width;
+      state.naturalH = parsed.height;
+      state.frames = parsed.frames;
+      state.loopCount = parsed.loopCount;
+      state.currentFrame = 0;
+      state.frameStartTime = 0;
+
+      previewCanvas.width = state.naturalW;
+      previewCanvas.height = state.naturalH;
+      sourceCanvas.width = state.naturalW;
+      sourceCanvas.height = state.naturalH;
+      drawFrameToSource(0);
+
+      placeholder.style.display = "none";
+      previewCanvas.style.display = "block";
+      fileMeta.textContent = `${file.name} — ${state.naturalW}×${state.naturalH}px`;
+      const totalMs = parsed.frames.reduce((sum, f) => sum + f.delay, 0);
+      gifInfo.textContent = `${parsed.frames.length} frame${parsed.frames.length === 1 ? "" : "s"} decoded, ~${(totalMs / 1000).toFixed(1)}s per loop.`;
+      state.gifLoaded = true;
+      exportBtn.disabled = false;
+      showStatus("", "");
+      resultCard.classList.remove("active");
+    };
+    reader.onerror = () => showStatus("Couldn't read that file.", "error");
+    reader.readAsArrayBuffer(file);
+  }
+
+  function drawFrameToSource(idx){
+    const f = state.frames[idx];
+    sctx.putImageData(new ImageData(f.imageData, state.naturalW, state.naturalH), 0, 0);
+  }
+
+  fileInput.addEventListener("change", e => loadGifFile(e.target.files[0]));
+  dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("drag"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+  dropzone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropzone.classList.remove("drag");
+    loadGifFile(e.dataTransfer.files[0]);
+  });
+
+  // ---------- Transform controls ----------
+  function syncLabels(){
+    scaleVal.textContent = state.scale + "%";
+    xVal.textContent = state.x;
+    yVal.textContent = state.y;
+    rotVal.textContent = state.rotation + "°";
+  }
+  scaleSlider.addEventListener("input", () => { state.scale = +scaleSlider.value; syncLabels(); });
+  xSlider.addEventListener("input", () => { state.x = +xSlider.value; syncLabels(); });
+  ySlider.addEventListener("input", () => { state.y = +ySlider.value; syncLabels(); });
+  rotSlider.addEventListener("input", () => { state.rotation = +rotSlider.value; syncLabels(); });
+  invertCheck.addEventListener("change", () => { state.invert = invertCheck.checked; });
+  resetTransformBtn.addEventListener("click", () => {
+    state.scale = 100; state.x = 0; state.y = 0; state.rotation = 0;
+    scaleSlider.value = 100; xSlider.value = 0; ySlider.value = 0; rotSlider.value = 0;
+    syncLabels();
+  });
+  syncLabels();
+
+  speedSlider.addEventListener("input", () => { speedVal.textContent = speedSlider.value + "%"; });
+
+  // ---------- Drawing helpers ----------
+  function drawMaskShape(ctx, w, h){
+    if (!state.maskImg) return;
+    const baseSize = Math.min(w, h) * 0.9 * (state.scale / 100);
+    const ratio = state.maskImg.naturalWidth / state.maskImg.naturalHeight || 1;
+    let drawW = baseSize, drawH = baseSize;
+    if (ratio > 1) drawH = baseSize / ratio; else drawW = baseSize * ratio;
+    const cx = w / 2 + (state.x / 100) * w;
+    const cy = h / 2 + (state.y / 100) * h;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.drawImage(state.maskImg, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
+  }
+
+  // masks `srcCtx`'s current content in place using the current shape/transform
+  function applyMaskToCanvas(ctx, w, h){
+    ctx.globalCompositeOperation = state.invert ? "destination-out" : "destination-in";
+    drawMaskShape(ctx, w, h);
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  // ---------- Live preview loop ----------
+  // Frame advancement is driven by the decoded frames' own delay values,
+  // not by browser GIF-animation timing, so this can't silently freeze.
+  function previewLoop(ts){
+    if (state.gifLoaded && state.frames.length) {
+      if (!state.frameStartTime) state.frameStartTime = ts;
+      const elapsed = ts - state.frameStartTime;
+      if (state.frames.length > 1 && elapsed >= state.frames[state.currentFrame].delay) {
+        state.currentFrame = (state.currentFrame + 1) % state.frames.length;
+        state.frameStartTime = ts;
+        drawFrameToSource(state.currentFrame);
+      }
+      const w = previewCanvas.width, h = previewCanvas.height;
+      pctx.clearRect(0, 0, w, h);
+      pctx.drawImage(sourceCanvas, 0, 0);
+      applyMaskToCanvas(pctx, w, h);
+    }
+    requestAnimationFrame(previewLoop);
+  }
+  requestAnimationFrame(previewLoop);
+
+  // ---------- Status / progress helpers ----------
+  function showStatus(msg, kind){
+    statusMsg.textContent = msg || "";
+    statusMsg.className = "status-msg" + (kind ? " " + kind : "");
+  }
+  function setProgress(pct){
+    progressWrap.classList.add("active");
+    progressBar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+  function hideProgress(){
+    progressWrap.classList.remove("active");
+    progressBar.style.width = "0%";
+  }
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+  // ---------- gif.js loading (deferred until export) ----------
+  const GIFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js";
+  const GIFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js";
+  let workerBlobUrlCache = null;
+
+  function loadScriptOnce(src){
+    return new Promise((resolve, reject) => {
+      if (window.GIF) return resolve();
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("Couldn't load the GIF encoder from cdnjs.cloudflare.com."));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function getWorkerBlobUrl(){
+    if (workerBlobUrlCache) return workerBlobUrlCache;
+    const resp = await fetch(GIFJS_WORKER_URL);
+    if (!resp.ok) throw new Error("Couldn't fetch the GIF encoder worker script.");
+    const text = await resp.text();
+    const blob = new Blob([text], { type: "application/javascript" });
+    workerBlobUrlCache = URL.createObjectURL(blob);
+    return workerBlobUrlCache;
+  }
+
+  // ---------- Export ----------
+  const KEY_COLOR = "#ff00ff"; // chroma-key used for hard GIF transparency
+
+  exportBtn.addEventListener("click", async () => {
+    if (!state.gifLoaded) return;
+    exportBtn.disabled = true;
+    resultCard.classList.remove("active");
+    showStatus("Loading GIF encoder…", "");
+    setProgress(2);
+
+    try {
+      await loadScriptOnce(GIFJS_URL);
+      const workerUrl = await getWorkerBlobUrl();
+
+      const scale = parseFloat(sizeSelect.value);
+      const w = Math.max(1, Math.round(state.naturalW * scale));
+      const h = Math.max(1, Math.round(state.naturalH * scale));
+      const speedFactor = parseInt(speedSlider.value, 10) / 100;
+      const totalFrames = state.frames.length;
+
+      const gif = new GIF({
+        workers: 2,
+        quality: 10,
+        width: w,
+        height: h,
+        workerScript: workerUrl,
+        transparent: 0xff00ff,
+        dither: false,
+        background: KEY_COLOR,
+        repeat: 0
+      });
+
+      showStatus("Capturing frames…", "");
+      // Reused scratch canvases are safe here: each is fully consumed
+      // (drawn into a brand-new "out" canvas) before being overwritten on
+      // the next iteration. Only "out" needs to be fresh per frame, since
+      // that's the one handed to the encoder.
+      const natCanvas = document.createElement("canvas");
+      natCanvas.width = state.naturalW; natCanvas.height = state.naturalH;
+      const natCtx = natCanvas.getContext("2d");
+      const tmp = document.createElement("canvas"); tmp.width = w; tmp.height = h;
+      const tctx = tmp.getContext("2d");
+
+      for (let i = 0; i < totalFrames; i++) {
+        const f = state.frames[i];
+        natCtx.putImageData(new ImageData(f.imageData, state.naturalW, state.naturalH), 0, 0);
+
+        tctx.clearRect(0, 0, w, h);
+        tctx.drawImage(natCanvas, 0, 0, w, h);
+        applyMaskToCanvas(tctx, w, h);
+
+        // GIF transparency is all-or-nothing. Anti-aliased mask edges leave
+        // partially-transparent pixels that would otherwise blend with the
+        // chroma-key background below and show up as a colored fringe, so
+        // snap every pixel's alpha to fully opaque or fully transparent
+        // before compositing onto the key color.
+        const imgData = tctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+        for (let p = 3; p < d.length; p += 4) {
+          d[p] = d[p] < 128 ? 0 : 255;
+        }
+        tctx.putImageData(imgData, 0, 0);
+
+        const out = document.createElement("canvas"); out.width = w; out.height = h;
+        const octx = out.getContext("2d");
+        octx.fillStyle = KEY_COLOR;
+        octx.fillRect(0, 0, w, h);
+        octx.drawImage(tmp, 0, 0);
+
+        const delay = Math.max(20, Math.round(f.delay / speedFactor));
+        gif.addFrame(out, { delay, copy: true });
+        setProgress(((i + 1) / totalFrames) * 45);
+        if (i % 3 === 0) await sleep(0); // keep the UI responsive
+      }
+
+      showStatus("Encoding GIF…", "");
+      gif.on("progress", p => setProgress(45 + p * 55));
+      gif.on("finished", blob => {
+        const url = URL.createObjectURL(blob);
+        resultImg.src = url;
+        downloadLink.href = url;
+        resultCard.classList.add("active");
+        showStatus("Done. Preview the cut GIF below.", "ok");
+        hideProgress();
+        exportBtn.disabled = false;
+      });
+      gif.render();
+
+    } catch (err) {
+      console.error(err);
+      showStatus("Export failed: " + err.message, "error");
+      hideProgress();
+      exportBtn.disabled = false;
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

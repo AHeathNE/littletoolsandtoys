@@ -160,6 +160,8 @@
                     <li><button class="tab-btn active" data-tab="tab-1">Image Making</button></li>
                     <li><button class="tab-btn" data-tab="tab-2">Printing</button></li>
                     <li><button class="tab-btn" data-tab="tab-3">Silly Projects</button></li>
+                    <li><button class="tab-btn" data-tab="tab-4">GIF Tools</button></li>
+                    <li><button class="tab-btn" data-tab="tab-5">Audio Tools</button></li>
                 </ul>
 
                 <div id="tab-1" class="tab-panel active">
@@ -194,6 +196,7 @@
                             <li><button class="nav-btn" data-target="img-sign" onclick="changeText14()">Signature Press</button></li>
                             <li><button class="nav-btn" data-target="img-rens" onclick="changeText15()">Rename &amp; Shuffle</button></li>
                             <li><button class="nav-btn" data-target="img-weav" onclick="changeText11()">Page Weaver</button></li>
+                            <li><button class="nav-btn" data-target="img-pgrd" onclick="changeText35()">Poster Grid Studio</button></li>
 
                         </ul>
 
@@ -208,6 +211,37 @@
                             <li><button class="nav-btn" data-target="img-rulr" onclick="changeText20()">Inaccurate Ruler</button></li>
                             <li><button class="nav-btn" data-target="img-rgrd" onclick="changeText17()">Random Grid</button></li>
                             <li><button class="nav-btn" data-target="img-gcmp" onclick="changeText12()">Grid Composer</button></li>
+                            <li><button class="nav-btn" data-target="img-ixgr" onclick="changeText34()">Image &rarr; X Grid</button></li>
+                        </ul>
+
+                        <p class="tool-desc">Select a tool above to see how it works.</p>
+                    </div>
+                </div>
+
+                <div id="tab-4" class="tab-panel">
+                    <div class="tools-row">
+                        <ul class="button-list">
+                            <li><button class="nav-btn" data-target="img-gfsm" onclick="changeText22()">Gifsmith</button></li>
+                            <li><button class="nav-btn" data-target="img-fgrb" onclick="changeText23()">Frame Grabber</button></li>
+                            <li><button class="nav-btn" data-target="img-ggrd" onclick="changeText24()">GIF Grid Studio</button></li>
+                            <li><button class="nav-btn" data-target="img-fcut" onclick="changeText25()">Frame Cutter</button></li>
+                            <li><button class="nav-btn" data-target="img-gspl" onclick="changeText26()">GIF Splicer</button></li>
+                            <li><button class="nav-btn" data-target="img-i2gif" onclick="changeText27()">Images to GIF</button></li>
+                            <li><button class="nav-btn" data-target="img-fswp" onclick="changeText28()">Format Swap</button></li>
+                            <li><button class="nav-btn" data-target="img-gedt" onclick="changeText29()">Crop &amp; Overlay</button></li>
+                            <li><button class="nav-btn" data-target="img-shpc" onclick="changeText30()">Shape Cutter</button></li>
+                            <li><button class="nav-btn" data-target="img-gifcp" onclick="changeText31()">GIF Compressor</button></li>
+                        </ul>
+
+                        <p class="tool-desc">Select a tool above to see how it works.</p>
+                    </div>
+                </div>
+
+                <div id="tab-5" class="tab-panel">
+                    <div class="tools-row">
+                        <ul class="button-list">
+                            <li><button class="nav-btn" data-target="img-acut" onclick="changeText32()">Audio Cutter</button></li>
+                            <li><button class="nav-btn" data-target="img-mp3c" onclick="changeText33()">MP3 Compressor</button></li>
                         </ul>
 
                         <p class="tool-desc">Select a tool above to see how it works.</p>
@@ -220,26 +254,40 @@
         <div class="image-column">
             <!-- Images mapped explicitly to the data-target attributes above -->
             <img id="img-info" class="active" src="images/Painting.jpg" alt="Painting of a man and woman">
-            <img id="img-comp" src="images/comp.jpg" alt="Low Quality jpeg of Painting">
-            <img id="img-bitm" src="images/bitm.bmp" alt="Bitmap of Painting">
-            <img id="img-crop" src="images/crop.png" alt="Cropped Image of Painting">
-            <img id="img-dial" src="images/dial.gif" alt="Slowly loading gif of Painting">
-            <img id="img-duot" src="images/duot.png" alt="Duotone image of Painting">
-            <img id="img-shif" src="images/shif.png" alt="Pixel Shifted image of Painting">
-            <img id="img-tile" src="images/tile.png" alt="Cut up image of Painting">
-            <img id="img-post" src="images/post.png" alt="Posterized image of Painting">
-            <img id="img-cont" src="images/cont.png" alt="Black and White image of Painting">
-            <img id="img-weav" src="images/weav.png" alt="Preview of the Page Weaver tool">
-            <img id="img-gcmp" src="images/gcmp.png" alt="Preview of the Grid Composer tool">
-            <img id="img-layo" src="images/layo.png" alt="Preview of the Layout Tool">
-            <img id="img-sign" src="images/sign.png" alt="Preview of the Signature Press tool">
-            <img id="img-rens" src="images/rens.png" alt="Preview of the Rename and Shuffle tool">
-            <img id="img-jpgc" src="images/jpgc.png" alt="Preview of the JPEG Compressor tool">
-            <img id="img-rgrd" src="images/rgrd.png" alt="Preview of the Random Grid tool">
-            <img id="img-enlg" src="images/enlg.png" alt="Preview of the Enlarger tool">
-            <img id="img-splt" src="images/splt.png" alt="Preview of the Text Splitter tool">
-            <img id="img-rulr" src="images/rulr.png" alt="Preview of the Inaccurate Ruler tool">
-            <img id="img-gsfl" src="images/gsfl.png" alt="Preview of the Grid Shuffler tool">
+            <img id="img-comp" src="comp.jpg" alt="Low Quality jpeg of Painting">
+            <img id="img-bitm" src="bitm.bmp" alt="Bitmap of Painting">
+            <img id="img-crop" src="crop.png" alt="Cropped Image of Painting">
+            <img id="img-dial" src="dial.gif" alt="Slowly loading gif of Painting">
+            <img id="img-duot" src="duot.png" alt="Duotone image of Painting">
+            <img id="img-shif" src="shif.png" alt="Pixel Shifted image of Painting">
+            <img id="img-tile" src="tile.png" alt="Cut up image of Painting">
+            <img id="img-post" src="post.png" alt="Posterized image of Painting">
+            <img id="img-cont" src="cont.png" alt="Black and White image of Painting">
+            <img id="img-weav" src="weav.png" alt="Preview of the Page Weaver tool">
+            <img id="img-gcmp" src="gcmp.svg" alt="Preview of the Grid Composer tool">
+            <img id="img-layo" src="layo.png" alt="Preview of the Layout Tool">
+            <img id="img-sign" src="sign.png" alt="Preview of the Signature Press tool">
+            <img id="img-rens" src="rens.png" alt="Preview of the Rename and Shuffle tool">
+            <img id="img-jpgc" src="jpgc.png" alt="Preview of the JPEG Compressor tool">
+            <img id="img-rgrd" src="rgrd.png" alt="Preview of the Random Grid tool">
+            <img id="img-enlg" src="enlg.png" alt="Preview of the Enlarger tool">
+            <img id="img-splt" src="splt.png" alt="Preview of the Text Splitter tool">
+            <img id="img-rulr" src="rulr.png" alt="Preview of the Inaccurate Ruler tool">
+            <img id="img-gsfl" src="gsfl.png" alt="Preview of the Grid Shuffler tool">
+            <img id="img-pgrd" src="pgrd.svg" alt="Preview of the Poster Grid Studio tool">
+            <img id="img-ixgr" src="ixgr.svg" alt="Preview of the Image to X Grid tool">
+            <img id="img-gfsm" src="gfsm.svg" alt="Preview of the Gifsmith tool">
+            <img id="img-fgrb" src="fgrb.svg" alt="Preview of the Frame Grabber tool">
+            <img id="img-ggrd" src="ggrd.svg" alt="Preview of the GIF Grid Studio tool">
+            <img id="img-fcut" src="fcut.svg" alt="Preview of the Frame Cutter tool">
+            <img id="img-gspl" src="gspl.svg" alt="Preview of the GIF Splicer tool">
+            <img id="img-i2gif" src="i2gif.svg" alt="Preview of the Images to GIF tool">
+            <img id="img-fswp" src="fswp.svg" alt="Preview of the Format Swap tool">
+            <img id="img-gedt" src="gedt.svg" alt="Preview of the Crop and Overlay tool">
+            <img id="img-shpc" src="shpc.svg" alt="Preview of the Shape Cutter tool">
+            <img id="img-gifcp" src="gifcp.svg" alt="Preview of the GIF Compressor tool">
+            <img id="img-acut" src="acut.svg" alt="Preview of the Audio Cutter tool">
+            <img id="img-mp3c" src="mp3c.svg" alt="Preview of the MP3 Compressor tool">
         </div>
     </div>
 
@@ -361,6 +409,48 @@
         }
         function changeText21() {
             setToolText('See how the Grid Shuffler works: <a href="image-grid-shuffler.html" target="_blank">View Grid Shuffler</a>');
+        }
+        function changeText22() {
+            setToolText('See how Gifsmith works: <a href="gifsmith-2.html" target="_blank">View Gifsmith</a>');
+        }
+        function changeText23() {
+            setToolText('See how the Frame Grabber works: <a href="frame-grabber-2.html" target="_blank">View Frame Grabber</a>');
+        }
+        function changeText24() {
+            setToolText('See how GIF Grid Studio works: <a href="gif-grid-studio-4.html" target="_blank">View GIF Grid Studio</a>');
+        }
+        function changeText25() {
+            setToolText('See how the Frame Cutter works: <a href="frame-cutter-5.html" target="_blank">View Frame Cutter</a>');
+        }
+        function changeText26() {
+            setToolText('See how the GIF Splicer works: <a href="gif-splicer.html" target="_blank">View GIF Splicer</a>');
+        }
+        function changeText27() {
+            setToolText('See how Images to GIF works: <a href="image-to-gif-3.html" target="_blank">View Images to GIF</a>');
+        }
+        function changeText28() {
+            setToolText('See how Format Swap works: <a href="image-converter.html" target="_blank">View Format Swap</a>');
+        }
+        function changeText29() {
+            setToolText('See how Crop &amp; Overlay works: <a href="gif-editor.html" target="_blank">View Crop &amp; Overlay</a>');
+        }
+        function changeText30() {
+            setToolText('See how the Shape Cutter works: <a href="gif-shape-cutter-3.html" target="_blank">View Shape Cutter</a>');
+        }
+        function changeText31() {
+            setToolText('See how the GIF Compressor works: <a href="gif-compressor-2.html" target="_blank">View GIF Compressor</a>');
+        }
+        function changeText32() {
+            setToolText('See how the Audio Cutter works: <a href="audio-cutter.html" target="_blank">View Audio Cutter</a>');
+        }
+        function changeText33() {
+            setToolText('See how the MP3 Compressor works: <a href="mp3-compressor.html" target="_blank">View MP3 Compressor</a>');
+        }
+        function changeText34() {
+            setToolText('See how Image &rarr; X Grid works: <a href="image-to-x-grid.html" target="_blank">View Image &rarr; X Grid</a>');
+        }
+        function changeText35() {
+            setToolText('See how Poster Grid Studio works: <a href="poster-grid-studio-4.html" target="_blank">View Poster Grid Studio</a>');
         }
     </script>
 

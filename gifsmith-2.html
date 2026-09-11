@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gifsmith — GIF editor</title>
+<style>
+  :root {
+    --bg: #121212;
+    --panel: #1A1A1D;
+    --panel-alt: #202024;
+    --border: #2E2E33;
+    --text: #F2F0EA;
+    --text-dim: #8F8D93;
+    --accent: #FF6B35;
+    --accent-dim: #A6481F;
+    --accent2: #3ED6C4;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+
+  ::selection { background: var(--accent); color: #121212; }
+
+  header {
+    padding: 28px 24px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  header h1 span { color: var(--accent); }
+
+  header p {
+    margin: 6px 0 0;
+    color: var(--text-dim);
+    font-size: 14px;
+    max-width: 560px;
+    line-height: 1.5;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+    gap: 20px;
+    padding: 20px 24px 40px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    min-height: 420px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dropzone {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    padding: 40px 20px;
+    cursor: pointer;
+    border: 1px dashed var(--border);
+    margin: 16px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(255, 107, 53, 0.06);
+  }
+
+  .dropzone svg { width: 40px; height: 40px; stroke: var(--text-dim); }
+
+  .dropzone strong { font-size: 15px; }
+  .dropzone span { color: var(--text-dim); font-size: 13px; }
+
+  .canvas-wrap {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .canvas-wrap.active { display: flex; }
+
+  #previewCanvas {
+    max-width: 100%;
+    max-height: 380px;
+    background:
+      linear-gradient(45deg, #232326 25%, transparent 25%),
+      linear-gradient(-45deg, #232326 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #232326 75%),
+      linear-gradient(-45deg, transparent 75%, #232326 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    image-rendering: pixelated;
+  }
+
+  .meta-row {
+    display: flex;
+    gap: 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .meta-row b { color: var(--text); font-weight: 500; }
+
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  button {
+    font-family: var(--sans);
+    font-size: 13px;
+    border: 1px solid var(--border);
+    background: var(--panel-alt);
+    color: var(--text);
+    padding: 9px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  button:hover { border-color: var(--text-dim); }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #17100b;
+    font-weight: 600;
+  }
+
+  button.primary:hover { background: #ff7c4d; }
+
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    max-height: 760px;
+  }
+
+  .panel-scroll {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .section {
+    padding: 18px 18px 4px;
+    border-left: 3px solid transparent;
+  }
+
+  .section.on { border-left-color: var(--accent2); }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .section-head h2 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text);
+  }
+
+  .toggle {
+    position: relative;
+    width: 34px;
+    height: 19px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 13px;
+    height: 13px;
+    background: var(--text-dim);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+
+  .toggle.checked { border-color: var(--accent2); }
+  .toggle.checked::after { transform: translateX(15px); background: var(--accent2); }
+
+  .field {
+    margin-bottom: 14px;
+  }
+
+  .field-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .field-label b {
+    font-family: var(--mono);
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: var(--border);
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--text);
+    cursor: pointer;
+    border-radius: 0;
+  }
+
+  input[type="range"]:disabled { opacity: 0.35; }
+  input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent2); }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; background: var(--text); border: none; cursor: pointer; border-radius: 0;
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    cursor: pointer;
+  }
+
+  .divider { border-top: 1px solid var(--border); margin: 4px 0 0; }
+
+  .panel-footer {
+    padding: 16px 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+
+  .panel-footer button { flex: 1; }
+
+  .status-bar {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 0 18px 14px;
+    min-height: 16px;
+  }
+
+  .status-bar.error { color: #ff6b6b; }
+  .status-bar.ok { color: var(--accent2); }
+
+  .empty-panel {
+    padding: 40px 18px;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Gif<span>smith</span></h1>
+  <p>Load a GIF, then reshape its brightness, contrast, color, and structure frame by frame. Everything runs in your browser — nothing is uploaded anywhere.</p>
+</header>
+
+<main>
+  <div class="stage">
+    <div class="dropzone" id="dropzone">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      <strong>Drop a GIF here, or click to browse</strong>
+      <span>Animated or static GIF files only</span>
+      <input type="file" id="fileInput" accept="image/gif" style="display:none">
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="previewCanvas"></canvas>
+      <div class="meta-row" id="metaRow"></div>
+    </div>
+    <div class="toolbar">
+      <button id="loadNewBtn" style="display:none">Load a different GIF</button>
+      <div style="flex:1"></div>
+      <button id="playPauseBtn" style="display:none">Pause</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-scroll" id="panelScroll">
+      <div class="empty-panel" id="emptyPanel">
+        Controls appear here once a GIF is loaded. You'll be able to adjust brightness and contrast, shift or invert colors, posterize the palette, and reduce the image to a dithered bitmap — then export the result as a new GIF.
+      </div>
+      <div id="controls" style="display:none">
+
+        <div class="section on">
+          <div class="section-head"><h2>Tone</h2></div>
+          <div class="field">
+            <div class="field-label"><span>Brightness</span><b id="val-brightness">100%</b></div>
+            <input type="range" id="brightness" min="0" max="200" value="100">
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Contrast</span><b id="val-contrast">100%</b></div>
+            <input type="range" id="contrast" min="0" max="200" value="100">
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section on">
+          <div class="section-head"><h2>Color</h2></div>
+          <div class="field">
+            <div class="field-label"><span>Hue shift</span><b id="val-hue">0&deg;</b></div>
+            <input type="range" id="hue" min="0" max="360" value="0">
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Saturation</span><b id="val-saturate">100%</b></div>
+            <input type="range" id="saturate" min="0" max="200" value="100">
+          </div>
+          <div class="checkbox-row" id="invertRow">
+            <span class="toggle" id="invertToggle"></span>
+            Invert colors
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section" id="posterizeSection">
+          <div class="section-head">
+            <h2>Posterize</h2>
+            <span class="toggle" id="posterizeToggle"></span>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Color levels</span><b id="val-posterizeLevels">4</b></div>
+            <input type="range" id="posterizeLevels" min="2" max="8" value="4" disabled>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section" id="bitmapSection">
+          <div class="section-head">
+            <h2>Bitmap</h2>
+            <span class="toggle" id="bitmapToggle"></span>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Threshold</span><b id="val-threshold">128</b></div>
+            <input type="range" id="threshold" min="0" max="255" value="128" disabled>
+          </div>
+          <div class="checkbox-row" id="ditherRow">
+            <span class="toggle" id="ditherToggle"></span>
+            Dither (Floyd&ndash;Steinberg)
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="status-bar" id="statusBar"></div>
+    <div class="panel-footer" id="panelFooter" style="display:none">
+      <button id="resetBtn">Reset</button>
+      <button id="exportBtn" class="primary">Export GIF</button>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // GIF decoding
+  // ---------------------------------------------------------------------
+
+  class GifReader {
+    constructor(buffer) {
+      this.data = new Uint8Array(buffer);
+      this.pos = 0;
+      this.frames = [];
+      this.parse();
+    }
+    readByte() { return this.data[this.pos++]; }
+    readBytes(n) { const b = this.data.slice(this.pos, this.pos + n); this.pos += n; return b; }
+    readUint16() { const v = this.data[this.pos] | (this.data[this.pos + 1] << 8); this.pos += 2; return v; }
+
+    readColorTable(size) {
+      const table = [];
+      for (let i = 0; i < size; i++) {
+        table.push([this.readByte(), this.readByte(), this.readByte()]);
+      }
+      return table;
+    }
+
+    skipSubBlocks() {
+      while (true) {
+        const size = this.readByte();
+        if (!size) break;
+        this.pos += size;
+      }
+    }
+
+    readSubBlocksData() {
+      const chunks = [];
+      let total = 0;
+      while (true) {
+        const size = this.readByte();
+        if (!size) break;
+        chunks.push(this.data.slice(this.pos, this.pos + size));
+        this.pos += size;
+        total += size;
+      }
+      const out = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) { out.set(c, offset); offset += c.length; }
+      return out;
+    }
+
+    parse() {
+      const sig = String.fromCharCode.apply(null, this.readBytes(6));
+      if (sig.indexOf("GIF") !== 0) throw new Error("Not a GIF file");
+      this.width = this.readUint16();
+      this.height = this.readUint16();
+      const packed = this.readByte();
+      const gctFlag = (packed & 0x80) !== 0;
+      const gctSize = 2 << (packed & 0x07);
+      this.bgColorIndex = this.readByte();
+      this.pixelAspect = this.readByte();
+      this.gct = gctFlag ? this.readColorTable(gctSize) : null;
+
+      let gce = null;
+
+      while (this.pos < this.data.length) {
+        const blockType = this.readByte();
+        if (blockType === 0x21) {
+          const label = this.readByte();
+          if (label === 0xF9) {
+            this.readByte(); // block size, always 4
+            const p = this.readByte();
+            const delay = this.readUint16();
+            const transparentIndex = this.readByte();
+            this.readByte(); // terminator
+            gce = {
+              disposal: (p >> 2) & 0x07,
+              transparentFlag: p & 0x01,
+              delay: delay * 10,
+              transparentIndex
+            };
+          } else {
+            this.skipSubBlocks();
+          }
+        } else if (blockType === 0x2C) {
+          const left = this.readUint16();
+          const top = this.readUint16();
+          const w = this.readUint16();
+          const h = this.readUint16();
+          const p = this.readByte();
+          const lctFlag = (p & 0x80) !== 0;
+          const interlaced = (p & 0x40) !== 0;
+          const lctSize = 2 << (p & 0x07);
+          const colorTable = lctFlag ? this.readColorTable(lctSize) : this.gct;
+          const minCodeSize = this.readByte();
+          const raw = this.readSubBlocksData();
+          let indices = lzwDecode(minCodeSize, raw, w * h);
+          if (interlaced) indices = deinterlace(indices, w, h);
+
+          this.frames.push({
+            left, top, width: w, height: h,
+            colorTable: colorTable || [[0, 0, 0]],
+            indices,
+            delay: gce ? Math.max(gce.delay, 20) : 100,
+            disposal: gce ? gce.disposal : 0,
+            transparentIndex: (gce && gce.transparentFlag) ? gce.transparentIndex : -1
+          });
+          gce = null;
+        } else if (blockType === 0x3B || isNaN(blockType)) {
+          break;
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  function lzwDecode(minCodeSize, data, pixelCount) {
+    const CLEAR = 1 << minCodeSize;
+    const EOI = CLEAR + 1;
+    let codeSize, dict;
+
+    function resetDict() {
+      dict = [];
+      for (let i = 0; i < CLEAR; i++) dict[i] = [i];
+      dict[CLEAR] = [];
+      dict[EOI] = null;
+      codeSize = minCodeSize + 1;
+    }
+    resetDict();
+
+    const output = new Uint8Array(pixelCount);
+    let outPos = 0;
+    let bitPos = 0;
+
+    function readCode() {
+      let code = 0;
+      for (let i = 0; i < codeSize; i++) {
+        const byteIndex = bitPos >> 3;
+        if (byteIndex >= data.length) return EOI;
+        const bit = (data[byteIndex] >> (bitPos & 7)) & 1;
+        code |= bit << i;
+        bitPos++;
+      }
+      return code;
+    }
+
+    let prev = null;
+    while (outPos < pixelCount) {
+      const code = readCode();
+      if (code === CLEAR) { resetDict(); prev = null; continue; }
+      if (code === EOI) break;
+
+      let entry;
+      if (code < dict.length && dict[code]) entry = dict[code];
+      else if (code === dict.length && prev) entry = prev.concat([prev[0]]);
+      else break;
+
+      for (let i = 0; i < entry.length && outPos < pixelCount; i++) output[outPos++] = entry[i];
+
+      if (prev) {
+        dict.push(prev.concat([entry[0]]));
+        if (dict.length >= (1 << codeSize) && codeSize < 12) codeSize++;
+      }
+      prev = entry;
+    }
+    return output;
+  }
+
+  function deinterlace(indices, w, h) {
+    const output = new Uint8Array(indices.length);
+    const groups = [[0, 8], [4, 8], [2, 4], [1, 2]];
+    let srcRow = 0;
+    for (const [start, step] of groups) {
+      for (let row = start; row < h; row += step) {
+        output.set(indices.subarray(srcRow * w, srcRow * w + w), row * w);
+        srcRow++;
+      }
+    }
+    return output;
+  }
+
+  function compositeFrames(reader) {
+    const w = reader.width, h = reader.height;
+    const master = document.createElement("canvas");
+    master.width = w; master.height = h;
+    const mctx = master.getContext("2d", { willReadFrequently: true });
+    mctx.clearRect(0, 0, w, h);
+
+    let savedForRestore = null;
+    let prevDisposal = 0;
+    let prevRect = null;
+    const out = [];
+
+    for (const frame of reader.frames) {
+      if (prevDisposal === 2 && prevRect) {
+        mctx.clearRect(prevRect.left, prevRect.top, prevRect.width, prevRect.height);
+      } else if (prevDisposal === 3 && savedForRestore) {
+        mctx.putImageData(savedForRestore, 0, 0);
+      }
+
+      if (frame.disposal === 3) {
+        savedForRestore = mctx.getImageData(0, 0, w, h);
+      }
+
+      const sub = new ImageData(frame.width, frame.height);
+      const sd = sub.data;
+      const table = frame.colorTable;
+      for (let i = 0; i < frame.indices.length; i++) {
+        const idx = frame.indices[i];
+        const c = table[idx] || [0, 0, 0];
+        const p = i * 4;
+        sd[p] = c[0]; sd[p + 1] = c[1]; sd[p + 2] = c[2];
+        sd[p + 3] = (idx === frame.transparentIndex) ? 0 : 255;
+      }
+
+      if (frame.transparentIndex >= 0) {
+        const current = mctx.getImageData(frame.left, frame.top, frame.width, frame.height);
+        const cd = current.data;
+        for (let i = 0; i < sd.length; i += 4) {
+          if (sd[i + 3] !== 0) {
+            cd[i] = sd[i]; cd[i + 1] = sd[i + 1]; cd[i + 2] = sd[i + 2]; cd[i + 3] = 255;
+          }
+        }
+        mctx.putImageData(current, frame.left, frame.top);
+      } else {
+        mctx.putImageData(sub, frame.left, frame.top);
+      }
+
+      out.push({ imageData: mctx.getImageData(0, 0, w, h), delay: frame.delay });
+      prevDisposal = frame.disposal;
+      prevRect = { left: frame.left, top: frame.top, width: frame.width, height: frame.height };
+    }
+
+    return { width: w, height: h, frames: out };
+  }
+
+  // ---------------------------------------------------------------------
+  // Filtering
+  // ---------------------------------------------------------------------
+
+  function applyBitmap(imgData, w, h, threshold, dither) {
+    const d = imgData.data;
+    const gray = new Float32Array(w * h);
+    for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+      gray[p] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    }
+    if (dither) {
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          const old = gray[idx];
+          const val = old < threshold ? 0 : 255;
+          const err = old - val;
+          gray[idx] = val;
+          if (x + 1 < w) gray[idx + 1] += err * 7 / 16;
+          if (y + 1 < h) {
+            if (x > 0) gray[idx + w - 1] += err * 3 / 16;
+            gray[idx + w] += err * 5 / 16;
+            if (x + 1 < w) gray[idx + w + 1] += err * 1 / 16;
+          }
+        }
+      }
+    } else {
+      for (let i = 0; i < gray.length; i++) gray[i] = gray[i] < threshold ? 0 : 255;
+    }
+    for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+      const v = gray[p] < 128 ? 0 : 255;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    return imgData;
+  }
+
+  function processFrame(originalImageData, w, h, s, canvasA, canvasB) {
+    const ctxA = canvasA.getContext("2d");
+    ctxA.putImageData(originalImageData, 0, 0);
+
+    const ctxB = canvasB.getContext("2d");
+    ctxB.clearRect(0, 0, w, h);
+    const parts = [
+      `brightness(${s.brightness}%)`,
+      `contrast(${s.contrast}%)`,
+      `saturate(${s.saturate}%)`
+    ];
+    if (s.hue !== 0) parts.push(`hue-rotate(${s.hue}deg)`);
+    if (s.invert) parts.push("invert(1)");
+    ctxB.filter = parts.join(" ");
+    ctxB.drawImage(canvasA, 0, 0);
+    ctxB.filter = "none";
+
+    let imgData = ctxB.getImageData(0, 0, w, h);
+
+    if (s.posterize) {
+      const levels = s.posterizeLevels;
+      const step = 255 / (levels - 1);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = Math.round(Math.round(d[i] / step) * step);
+        d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step);
+        d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step);
+      }
+    }
+
+    if (s.bitmap) {
+      imgData = applyBitmap(imgData, w, h, s.threshold, s.dither);
+    }
+
+    return imgData;
+  }
+
+  // ---------------------------------------------------------------------
+  // App state & UI wiring
+  // ---------------------------------------------------------------------
+
+  const state = {
+    width: 0, height: 0,
+    originalFrames: null,
+    processedFrames: null,
+    settings: {
+      brightness: 100, contrast: 100, hue: 0, saturate: 100, invert: false,
+      posterize: false, posterizeLevels: 4,
+      bitmap: false, threshold: 128, dither: false
+    },
+    playing: true, frameIndex: 0, lastTick: 0
+  };
+
+  const el = (id) => document.getElementById(id);
+  const dropzone = el("dropzone");
+  const fileInput = el("fileInput");
+  const canvasWrap = el("canvasWrap");
+  const previewCanvas = el("previewCanvas");
+  const previewCtx = previewCanvas.getContext("2d");
+  const metaRow = el("metaRow");
+  const statusBar = el("statusBar");
+  const emptyPanel = el("emptyPanel");
+  const controls = el("controls");
+  const panelFooter = el("panelFooter");
+  const loadNewBtn = el("loadNewBtn");
+  const playPauseBtn = el("playPauseBtn");
+
+  const scratchA = document.createElement("canvas");
+  const scratchB = document.createElement("canvas");
+
+  function setStatus(msg, kind) {
+    statusBar.textContent = msg || "";
+    statusBar.className = "status-bar" + (kind ? " " + kind : "");
+  }
+
+  // Toggles are plain JS state — no hidden <input type="checkbox"> involved,
+  // so there's nothing for a wrapping element to double-fire a native click on.
+  const toggles = {};
+  function createToggle(clickElId, visualElId, sectionId, onChange) {
+    let checked = false;
+    const clickEl = el(clickElId);
+    const visualEl = el(visualElId);
+    function apply() {
+      visualEl.classList.toggle("checked", checked);
+      if (sectionId) el(sectionId).classList.toggle("on", checked);
+    }
+    clickEl.addEventListener("click", () => {
+      checked = !checked;
+      apply();
+      onChange(checked);
+    });
+    const api = {
+      get value() { return checked; },
+      reset(newVal) { checked = !!newVal; apply(); onChange(checked); }
+    };
+    toggles[visualElId] = api;
+    return api;
+  }
+
+  dropzone.addEventListener("click", () => fileInput.click());
+  loadNewBtn.addEventListener("click", () => fileInput.click());
+  ["dragenter", "dragover"].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add("drag-over"); })
+  );
+  ["dragleave", "drop"].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove("drag-over"); })
+  );
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+  fileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) handleFile(file);
+  });
+
+  function handleFile(file) {
+    if (!/image\/gif|\.gif$/i.test(file.type || file.name)) {
+      setStatus("Please choose a .gif file", "error");
+      return;
+    }
+    setStatus("Decoding GIF...");
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const gifReader = new GifReader(reader.result);
+        const composited = compositeFrames(gifReader);
+        loadGif(composited);
+      } catch (err) {
+        console.error(err);
+        setStatus("Couldn't read that GIF: " + err.message, "error");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function loadGif(composited) {
+    state.width = composited.width;
+    state.height = composited.height;
+    state.originalFrames = composited.frames;
+    state.frameIndex = 0;
+
+    previewCanvas.width = state.width;
+    previewCanvas.height = state.height;
+    scratchA.width = scratchB.width = state.width;
+    scratchA.height = scratchB.height = state.height;
+
+    dropzone.style.display = "none";
+    canvasWrap.classList.add("active");
+    loadNewBtn.style.display = "inline-block";
+    playPauseBtn.style.display = "inline-block";
+    emptyPanel.style.display = "none";
+    controls.style.display = "block";
+    panelFooter.style.display = "flex";
+
+    metaRow.innerHTML = `<span>${state.width}&times;${state.height}px</span><span><b>${composited.frames.length}</b> frame${composited.frames.length === 1 ? "" : "s"}</span>`;
+
+    reprocessAll();
+    setStatus("Loaded. Adjust the controls to reshape the animation.", "ok");
+    state.playing = true;
+    playPauseBtn.textContent = "Pause";
+    requestAnimationFrame(tick);
+  }
+
+  function reprocessAll() {
+    if (!state.originalFrames) return;
+    state.processedFrames = state.originalFrames.map(f => ({
+      imageData: processFrame(f.imageData, state.width, state.height, state.settings, scratchA, scratchB),
+      delay: f.delay
+    }));
+  }
+
+  let reprocessHandle = null;
+  function scheduleReprocess() {
+    if (reprocessHandle) clearTimeout(reprocessHandle);
+    reprocessHandle = setTimeout(() => { reprocessAll(); }, 30);
+  }
+
+  function tick(ts) {
+    if (state.processedFrames && state.processedFrames.length) {
+      if (state.playing) {
+        if (!state.lastTick) state.lastTick = ts;
+        const frame = state.processedFrames[state.frameIndex];
+        if (ts - state.lastTick >= frame.delay) {
+          state.lastTick = ts;
+          state.frameIndex = (state.frameIndex + 1) % state.processedFrames.length;
+        }
+      }
+      const current = state.processedFrames[state.frameIndex] || state.processedFrames[0];
+      if (current) previewCtx.putImageData(current.imageData, 0, 0);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  playPauseBtn.addEventListener("click", () => {
+    state.playing = !state.playing;
+    playPauseBtn.textContent = state.playing ? "Pause" : "Play";
+    state.lastTick = 0;
+  });
+
+  // --- slider wiring ---
+  function bindRange(id, settingKey, suffix, transform) {
+    const input = el(id);
+    const label = el("val-" + id);
+    input.addEventListener("input", () => {
+      const raw = Number(input.value);
+      state.settings[settingKey] = transform ? transform(raw) : raw;
+      label.textContent = raw + (suffix || "");
+      scheduleReprocess();
+    });
+  }
+
+  bindRange("brightness", "brightness", "%");
+  bindRange("contrast", "contrast", "%");
+  bindRange("hue", "hue", "\u00b0");
+  bindRange("saturate", "saturate", "%");
+  bindRange("posterizeLevels", "posterizeLevels", "");
+  bindRange("threshold", "threshold", "");
+
+  createToggle("invertRow", "invertToggle", null, (checked) => {
+    state.settings.invert = checked;
+    scheduleReprocess();
+  });
+
+  createToggle("posterizeToggle", "posterizeToggle", "posterizeSection", (checked) => {
+    state.settings.posterize = checked;
+    el("posterizeLevels").disabled = !checked;
+    scheduleReprocess();
+  });
+
+  createToggle("bitmapToggle", "bitmapToggle", "bitmapSection", (checked) => {
+    state.settings.bitmap = checked;
+    el("threshold").disabled = !checked;
+    el("ditherRow").style.opacity = checked ? "1" : "0.35";
+    el("ditherRow").style.pointerEvents = checked ? "auto" : "none";
+    scheduleReprocess();
+  });
+
+  createToggle("ditherRow", "ditherToggle", null, (checked) => {
+    state.settings.dither = checked;
+    scheduleReprocess();
+  });
+
+  // dither starts disabled until bitmap mode is on
+  el("ditherRow").style.opacity = "0.35";
+  el("ditherRow").style.pointerEvents = "none";
+
+  el("resetBtn").addEventListener("click", () => {
+    state.settings = {
+      brightness: 100, contrast: 100, hue: 0, saturate: 100, invert: false,
+      posterize: false, posterizeLevels: 4,
+      bitmap: false, threshold: 128, dither: false
+    };
+    el("brightness").value = 100; el("val-brightness").textContent = "100%";
+    el("contrast").value = 100; el("val-contrast").textContent = "100%";
+    el("hue").value = 0; el("val-hue").textContent = "0\u00b0";
+    el("saturate").value = 100; el("val-saturate").textContent = "100%";
+    el("posterizeLevels").value = 4; el("val-posterizeLevels").textContent = "4"; el("posterizeLevels").disabled = true;
+    el("threshold").value = 128; el("val-threshold").textContent = "128"; el("threshold").disabled = true;
+    toggles["invertToggle"].reset(false);
+    toggles["posterizeToggle"].reset(false);
+    toggles["bitmapToggle"].reset(false);
+    toggles["ditherToggle"].reset(false);
+    scheduleReprocess();
+    setStatus("Reset to original.", "ok");
+  });
+
+  // --- export ---
+  let workerBlobUrlPromise = null;
+  function getWorkerBlobUrl() {
+    if (!workerBlobUrlPromise) {
+      workerBlobUrlPromise = fetch("https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js")
+        .then(r => r.text())
+        .then(text => URL.createObjectURL(new Blob([text], { type: "application/javascript" })));
+    }
+    return workerBlobUrlPromise;
+  }
+
+  el("exportBtn").addEventListener("click", async () => {
+    if (!state.processedFrames || !state.processedFrames.length) return;
+    el("exportBtn").disabled = true;
+    setStatus("Preparing encoder...");
+    try {
+      const workerScript = await getWorkerBlobUrl();
+      const gif = new GIF({
+        workers: 3,
+        quality: 10,
+        width: state.width,
+        height: state.height,
+        workerScript
+      });
+
+      const outCanvas = document.createElement("canvas");
+      outCanvas.width = state.width;
+      outCanvas.height = state.height;
+      const outCtx = outCanvas.getContext("2d");
+
+      for (const frame of state.processedFrames) {
+        outCtx.putImageData(frame.imageData, 0, 0);
+        gif.addFrame(outCtx, { copy: true, delay: frame.delay });
+      }
+
+      gif.on("progress", (p) => setStatus(`Rendering GIF... ${Math.round(p * 100)}%`));
+      gif.on("finished", (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "gifsmith-export.gif";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setStatus("Exported. Check your downloads.", "ok");
+        el("exportBtn").disabled = false;
+      });
+
+      gif.render();
+    } catch (err) {
+      console.error(err);
+      setStatus("Export failed: " + err.message, "error");
+      el("exportBtn").disabled = false;
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

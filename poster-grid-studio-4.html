@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Poster Grid Studio</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: #dedad0;
+    color: #1c1d1f;
+  }
+  #app {
+    display: flex;
+    width: 100%;
+    height: 100vh;
+    flex-wrap: wrap;
+    --mono: 'IBM Plex Mono', monospace;
+    --accent: #3550e8;
+  }
+  .pgs-sidebar {
+    width: 320px;
+    flex-shrink: 0;
+    background: #1c1d1f;
+    color: #e8e7e2;
+    padding: 20px 18px 90px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    max-height: 100vh;
+  }
+  .pgs-title { font-size: 17px; font-weight: 700; letter-spacing: 0.2px; margin: 0 0 2px; }
+  .pgs-sub { font-size: 12px; color: #9a9a94; margin: 0 0 20px; }
+  .pgs-section { margin-bottom: 22px; border-top: 1px solid #33342f; padding-top: 16px; }
+  .pgs-section:first-of-type { border-top: none; padding-top: 0; }
+  .pgs-label {
+    font-size: 11px; color: #b7b6ae; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .pgs-mono { font-family: var(--mono); font-size: 11.5px; color: #d9d8cf; }
+  select.pgs-input, input.pgs-input {
+    width: 100%; background: #2a2b27; border: 1px solid #40413a; color: #eee;
+    border-radius: 6px; padding: 7px 8px; font-size: 13px; font-family: 'Space Grotesk', sans-serif;
+  }
+  input.pgs-input:focus, select.pgs-input:focus { outline: 2px solid var(--accent); }
+  .pgs-row { display: flex; gap: 8px; }
+  .pgs-row > * { flex: 1; min-width: 0; }
+  .pgs-toggle-group { display: flex; gap: 6px; }
+  .pgs-toggle {
+    flex: 1; background: #2a2b27; border: 1px solid #40413a; color: #cfcec6;
+    padding: 7px 6px; font-size: 12.5px; border-radius: 6px; cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .pgs-toggle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pgs-margin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .pgs-link-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #b7b6ae; margin-top: 8px; }
+  .pgs-slider-row { display: flex; align-items: center; gap: 10px; }
+  input[type="range"] { -webkit-appearance: none; flex: 1; height: 3px; background: #46473f; border-radius: 2px; }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; margin-top: -5.5px;
+  }
+  input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: var(--accent); cursor: pointer; }
+  .pgs-layout-options { display: flex; flex-direction: column; gap: 7px; }
+  .pgs-layout-btn {
+    display: flex; align-items: flex-start; gap: 10px; text-align: left; width: 100%;
+    background: #2a2b27; border: 1px solid #40413a; border-radius: 8px;
+    padding: 9px 10px; cursor: pointer; color: #e8e7e2; font-family: 'Space Grotesk', sans-serif;
+  }
+  .pgs-layout-btn.active { border-color: var(--accent); background: #22264a; }
+  .pgs-layout-btn svg { flex-shrink: 0; margin-top: 2px; color: #a7a6ff; }
+  .pgs-layout-btn.active svg { color: #8fa0ff; }
+  .pgs-layout-btn-title { font-size: 13px; font-weight: 600; }
+  .pgs-layout-btn-desc { font-size: 11.5px; color: #a5a49c; margin-top: 2px; line-height: 1.35; }
+  .pgs-upload-btn {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px dashed #5a5b52;
+    background: transparent; color: #e8e7e2; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .pgs-upload-btn:hover { border-color: var(--accent); color: #fff; }
+  .pgs-thumb-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .pgs-thumb {
+    display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;
+    background: #242520; cursor: pointer; border: 1px solid transparent;
+  }
+  .pgs-thumb.selected { border-color: var(--accent); background: #22264a; }
+  .pgs-thumb img { width: 34px; height: 34px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+  .pgs-thumb-name { font-size: 11.5px; color: #cfcec6; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pgs-thumb button { background: none; border: none; color: #8a897f; cursor: pointer; padding: 3px; display: flex; }
+  .pgs-thumb button:hover { color: #ff8a8a; }
+  .pgs-selected-panel { margin-top: 10px; padding: 10px; background: #22264a; border-radius: 8px; border: 1px solid #3550e855; display: none; }
+  .pgs-selected-panel.visible { display: block; }
+  .pgs-empty-note { font-size: 12px; color: #7c7b73; line-height: 1.5; }
+
+  .pgs-canvas-area {
+    flex: 1; min-width: 400px; display: flex; flex-direction: column; align-items: center;
+    padding: 26px 20px 40px; box-sizing: border-box; overflow: auto;
+  }
+  .pgs-canvas-header { width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .pgs-canvas-header h2 { font-size: 14px; margin: 0; color: #4c4d46; font-weight: 600; }
+  .pgs-canvas-header .pgs-mono { color: #6c6d64; }
+  .pgs-download-btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 7px; padding: 9px 14px;
+    font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 7px;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .pgs-download-btn:disabled { opacity: 0.6; cursor: default; }
+  .pgs-arrange-btn {
+    background: transparent; color: #4c4d46; border: 1px solid #b6b2a4; border-radius: 7px;
+    padding: 9px 12px; font-size: 12.5px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .pgs-poster { position: relative; background: #fff; box-shadow: 0 12px 34px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.12); flex-shrink: 0; margin-top: 4px; }
+  .pgs-poster.checkerboard {
+    background-color: #fff;
+    background-image:
+      linear-gradient(45deg, #ccc 25%, transparent 25%),
+      linear-gradient(-45deg, #ccc 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ccc 75%),
+      linear-gradient(-45deg, transparent 75%, #ccc 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  }
+  .pgs-margin-guide { position: absolute; border: 1px dashed #c9cbe8; pointer-events: none; }
+  .pgs-image-box { position: absolute; box-sizing: border-box; cursor: grab; touch-action: none; }
+  .pgs-image-box.selected { outline: 2px solid var(--accent); outline-offset: 0; box-shadow: 0 0 0 3px #3550e833; }
+  .pgs-image-box img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; user-select: none; }
+  .pgs-image-remove {
+    position: absolute; top: -9px; right: -9px; width: 20px; height: 20px; border-radius: 50%;
+    background: #1c1d1f; color: #fff; border: 2px solid #fff; align-items: center;
+    justify-content: center; cursor: pointer; z-index: 5; display: none;
+  }
+  .pgs-dropzone {
+    width: 100%; max-width: 900px; flex: 1; min-height: 300px; border: 2px dashed #b6b2a4; border-radius: 14px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #7c7b73; gap: 10px; text-align: center; padding: 30px; cursor: pointer;
+  }
+  .pgs-dropzone.over { border-color: var(--accent); background: #3550e80d; color: #3550e8; }
+  .pgs-dropzone button {
+    background: #1c1d1f; color: #fff; border: none; border-radius: 7px; padding: 9px 16px;
+    font-size: 13px; cursor: pointer; margin-top: 4px; font-family: 'Space Grotesk', sans-serif;
+  }
+  .pgs-warning {
+    margin-top: 10px; font-size: 12px; color: #9a5b00; background: #fdf0d5; border: 1px solid #edd39c;
+    padding: 7px 10px; border-radius: 6px; max-width: 900px; width: 100%; box-sizing: border-box; display: none;
+  }
+  .pgs-warning.visible { display: block; }
+  .pgs-poster-wrap { display: none; flex-direction: column; align-items: center; width: 100%; }
+  .pgs-poster-wrap.visible { display: flex; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="pgs-sidebar">
+    <p class="pgs-title">Poster Grid Studio</p>
+    <p class="pgs-sub">Arrange images onto a printable poster.</p>
+
+    <input id="fileInput" type="file" accept="image/*" multiple style="display:none" />
+    <button class="pgs-upload-btn" id="uploadBtn"></button>
+
+    <div class="pgs-section" style="margin-top:20px;">
+      <div class="pgs-label"><span>Poster size</span></div>
+      <select class="pgs-input" id="presetSelect"></select>
+      <div class="pgs-row" id="customSizeRow" style="margin-top:8px; display:none;">
+        <input class="pgs-input" type="number" min="1" step="0.1" id="customW" />
+        <input class="pgs-input" type="number" min="1" step="0.1" id="customH" />
+      </div>
+      <div class="pgs-toggle-group" id="orientationGroup" style="margin-top:8px;">
+        <button class="pgs-toggle active" id="btnPortrait" data-val="portrait">Portrait</button>
+        <button class="pgs-toggle" id="btnLandscape" data-val="landscape">Landscape</button>
+      </div>
+      <div class="pgs-toggle-group" style="margin-top:8px;">
+        <button class="pgs-toggle active" id="btnUnitIn" data-val="in">inches</button>
+        <button class="pgs-toggle" id="btnUnitCm" data-val="cm">cm</button>
+      </div>
+      <p class="pgs-mono" id="posterSizeReadout" style="margin-top:8px;"></p>
+    </div>
+
+    <div class="pgs-section">
+      <div class="pgs-label"><span>Margins (<span id="marginUnitLabel">in</span>)</span></div>
+      <div class="pgs-link-row">
+        <input type="checkbox" id="linkMargins" checked />
+        <label for="linkMargins">Same on all sides</label>
+      </div>
+      <input class="pgs-input" id="marginLinked" type="number" min="0" step="0.05" style="margin-top:8px;" />
+      <div class="pgs-margin-grid" id="marginGrid" style="display:none;">
+        <input class="pgs-input" id="marginTop" type="number" min="0" step="0.05" placeholder="top" />
+        <input class="pgs-input" id="marginRight" type="number" min="0" step="0.05" placeholder="right" />
+        <input class="pgs-input" id="marginBottom" type="number" min="0" step="0.05" placeholder="bottom" />
+        <input class="pgs-input" id="marginLeft" type="number" min="0" step="0.05" placeholder="left" />
+      </div>
+    </div>
+
+    <div class="pgs-section">
+      <div class="pgs-label"><span>Spacing between images</span><span class="pgs-mono" id="spacingReadout"></span></div>
+      <div class="pgs-slider-row"><input type="range" id="spacingSlider" min="0" max="2" step="0.05" /></div>
+    </div>
+
+    <div class="pgs-section">
+      <div class="pgs-label"><span>Image size (all)</span><span class="pgs-mono" id="globalScaleReadout">100%</span></div>
+      <div class="pgs-slider-row"><input type="range" id="globalScaleSlider" min="0.4" max="1.6" step="0.05" /></div>
+    </div>
+
+    <div class="pgs-section">
+      <div class="pgs-label"><span>Layout</span></div>
+      <div class="pgs-layout-options" id="layoutOptions"></div>
+    </div>
+
+    <div class="pgs-section">
+      <div class="pgs-label"><span>Images (<span id="imageCount">0</span>)</span></div>
+      <p class="pgs-empty-note" id="emptyNote">Nothing uploaded yet. Add images above, or drop them onto the poster.</p>
+      <div class="pgs-thumb-list" id="thumbList"></div>
+      <div class="pgs-selected-panel" id="selectedPanel">
+        <div class="pgs-label"><span>Selected image size</span><span class="pgs-mono" id="selectedScaleReadout">100%</span></div>
+        <input type="range" id="selectedScaleSlider" min="0.4" max="2.2" step="0.05" />
+      </div>
+    </div>
+
+    <div class="pgs-section">
+      <div class="pgs-label"><span>Export</span></div>
+      <select class="pgs-input" id="exportFormat">
+        <option value="png">PNG</option>
+        <option value="jpg">JPG</option>
+        <option value="pdf">PDF</option>
+      </select>
+      <div class="pgs-link-row" style="margin-top:8px;">
+        <input type="checkbox" id="transparentBg" />
+        <label for="transparentBg">Transparent background</label>
+      </div>
+      <p class="pgs-empty-note" id="transparentNote" style="margin-top:6px;"></p>
+    </div>
+
+    <div class="pgs-section">
+      <div class="pgs-link-row">
+        <input type="checkbox" id="showGuides" checked />
+        <label for="showGuides">Show margin guide</label>
+      </div>
+      <div class="pgs-link-row">
+        <input type="checkbox" id="lockArrangement" />
+        <label for="lockArrangement">Lock arrangement</label>
+      </div>
+      <p class="pgs-empty-note" style="margin-top:6px;">When locked, removing or adding images won't reshuffle the rest. New images drop in near the center — drag to place them. Use Re-arrange to force a fresh layout.</p>
+    </div>
+  </aside>
+
+  <main class="pgs-canvas-area" id="canvasArea">
+    <div class="pgs-canvas-header">
+      <h2>Poster preview <span class="pgs-mono" id="headerSizeReadout"></span></h2>
+      <div style="display:flex; gap:8px;">
+        <button class="pgs-arrange-btn" id="arrangeBtn"></button>
+        <button class="pgs-download-btn" id="downloadBtn" disabled></button>
+      </div>
+    </div>
+    <div class="pgs-warning" id="overflowWarning">Content runs past the bottom margin — reduce image size, spacing, or the number of images, or switch to the Even grid layout.</div>
+    <div class="pgs-dropzone" id="dropzone">
+      <div id="dropzoneIcon"></div>
+      <p style="margin:0; font-size:14px;">Drop images here, or click to browse</p>
+      <button id="dropzoneBtn">Choose files</button>
+    </div>
+    <div class="pgs-poster-wrap" id="posterWrap">
+      <div class="pgs-poster" id="poster">
+        <div class="pgs-margin-guide" id="marginGuide"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- icons ----------
+  const ICONS = {
+    upload: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 21h16"/></svg>',
+    download: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>',
+    x: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg>',
+    shuffle: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h4l10 12h3"/><path d="M4 18h4l3-3.5"/><path d="M14 6h6"/><path d="M17 3l3 3-3 3"/><path d="M17 21l3-3-3-3"/></svg>',
+    imageOff: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/><path d="M3 5v14a2 2 0 0 0 2 2h14"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+    arrowDownUp: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v14"/><path d="M3 13l4 4 4-4"/><path d="M17 21V7"/><path d="M21 11l-4-4-4 4"/></svg>',
+    alignJustify: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>',
+    rows: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>'
+  };
+
+  // ---------- constants ----------
+  const PX_PER_IN = 96;
+  const EXPORT_DPI = 150;
+  const PREVIEW_MAX_W = 640;
+  const PREVIEW_MAX_H = 760;
+
+  const PRESETS = [
+    { key: "letter", label: "Letter", w: 8.5, h: 11 },
+    { key: "a4", label: "A4", w: 8.27, h: 11.69 },
+    { key: "a3", label: "A3", w: 11.69, h: 16.54 },
+    { key: "a2", label: "A2", w: 16.54, h: 23.39 },
+    { key: "18x24", label: "18 × 24 in", w: 18, h: 24 },
+    { key: "24x36", label: "24 × 36 in", w: 24, h: 36 },
+    { key: "square12", label: "12 × 12 in", w: 12, h: 12 },
+    { key: "custom", label: "Custom", w: null, h: null }
+  ];
+
+  const LAYOUT_MODES = [
+    { key: "grid", label: "Even grid", desc: "Images spaced evenly across the whole page", icon: ICONS.grid },
+    { key: "sequential", label: "Sequential", desc: "Left to right, top to bottom, natural sizes", icon: ICONS.arrowDownUp },
+    { key: "justified", label: "Justified rows", desc: "Even gaps between images, rows flush edge to edge", icon: ICONS.alignJustify },
+    { key: "fill", label: "Fill margins", desc: "First row meets the top margin, last row meets the bottom", icon: ICONS.rows }
+  ];
+
+  let idSeed = 1;
+  const nextId = () => "img-" + (idSeed++) + "-" + Date.now().toString(36);
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+  function loadImageEl(src) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = src;
+    });
+  }
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  // ---------- layout algorithms ----------
+  function gridLayout(items, availW, availH, spacing, scale, fillVertical) {
+    const n = items.length;
+    if (n === 0) return [];
+    availW = Math.max(availW, 10);
+    availH = Math.max(availH, 10);
+    let cols = clamp(Math.round(Math.sqrt((n * availW) / availH)), 1, n);
+    let rows = Math.ceil(n / cols);
+    const cellW = (availW - (cols - 1) * spacing) / cols;
+    const cellH = (availH - (rows - 1) * spacing) / rows;
+    let vGap = spacing;
+    if (fillVertical && rows > 1) vGap = (availH - rows * cellH) / (rows - 1);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      const rowCount = Math.min(cols, n - row * cols);
+      const rowWidth = rowCount * cellW + (rowCount - 1) * spacing;
+      const rowStartX = (availW - rowWidth) / 2;
+      const cellX = rowStartX + col * (cellW + spacing);
+      const cellY = row * (cellH + vGap);
+      const targetW = cellW * scale;
+      const targetH = cellH * scale;
+      const r = items[i].r;
+      let w, h;
+      if (targetW / targetH > r) { h = targetH; w = h * r; } else { w = targetW; h = w / r; }
+      out.push({ id: items[i].id, x: cellX + (cellW - w) / 2, y: cellY + (cellH - h) / 2, w, h });
+    }
+    return out;
+  }
+
+  function flowLayout(items, availW, availH, spacing, scale) {
+    const n = items.length;
+    if (n === 0) return [];
+    availW = Math.max(availW, 10);
+    availH = Math.max(availH, 10);
+    const avgR = items.reduce((s, it) => s + it.r, 0) / n;
+    const approxRows = clamp(Math.round(Math.sqrt((n * avgR * availH) / availW)), 1, n);
+    const targetH = Math.max(16, ((availH - (approxRows - 1) * spacing) / approxRows) * scale);
+    const out = [];
+    let x = 0, y = 0, rowH = 0;
+    items.forEach((it) => {
+      const w = targetH * it.r;
+      if (x > 0 && x + w > availW) { x = 0; y += rowH + spacing; rowH = 0; }
+      out.push({ id: it.id, x, y, w, h: targetH });
+      x += w + spacing;
+      rowH = Math.max(rowH, targetH);
+    });
+    return out;
+  }
+
+  function justifiedLayout(items, availW, availH, spacing, scale) {
+    const n = items.length;
+    if (n === 0) return [];
+    availW = Math.max(availW, 10);
+    availH = Math.max(availH, 10);
+    const avgR = items.reduce((s, it) => s + it.r, 0) / n;
+    const approxRows = clamp(Math.round(Math.sqrt((n * avgR * availH) / availW)), 1, n);
+    const baseTargetH = Math.max(16, ((availH - (approxRows - 1) * spacing) / approxRows) * scale);
+    const rows = [];
+    let current = [], curW = 0;
+    items.forEach((it) => {
+      const w = baseTargetH * it.r;
+      if (current.length > 0 && curW + w > availW) { rows.push(current); current = []; curW = 0; }
+      current.push(it);
+      curW += w + spacing;
+    });
+    if (current.length) rows.push(current);
+    const out = [];
+    let y = 0;
+    rows.forEach((row) => {
+      const sumR = row.reduce((s, it) => s + it.r, 0);
+      let h = (availW - (row.length - 1) * spacing) / sumR;
+      h = Math.min(h, baseTargetH * 1.6);
+      let x = 0;
+      row.forEach((it) => {
+        const w = h * it.r;
+        out.push({ id: it.id, x, y, w, h });
+        x += w + spacing;
+      });
+      y += h + spacing;
+    });
+    return out;
+  }
+
+  function computeLayout(images, mode, posterWpx, posterHpx, marginsPx, spacingPx, scale) {
+    const availW = posterWpx - marginsPx.left - marginsPx.right;
+    const availH = posterHpx - marginsPx.top - marginsPx.bottom;
+    const meta = images.map((im) => ({ id: im.id, r: im.natW / im.natH }));
+    let base;
+    if (mode === "grid") base = gridLayout(meta, availW, availH, spacingPx, scale, false);
+    else if (mode === "fill") base = gridLayout(meta, availW, availH, spacingPx, scale, true);
+    else if (mode === "sequential") base = flowLayout(meta, availW, availH, spacingPx, scale);
+    else base = justifiedLayout(meta, availW, availH, spacingPx, scale);
+    return base.map((b) => ({ ...b, x: b.x + marginsPx.left, y: b.y + marginsPx.top }));
+  }
+
+  // ---------- state ----------
+  const state = {
+    images: [],
+    selectedId: null,
+    unit: "in",
+    presetKey: "18x24",
+    customW: 18,
+    customH: 24,
+    orientation: "portrait",
+    margin: { top: 1, right: 1, bottom: 1, left: 1 },
+    linkMargins: true,
+    spacing: 0.25,
+    globalScale: 1,
+    layoutMode: "grid",
+    showGuides: true,
+    locked: false,
+    exportFormat: "png",
+    transparentBg: false
+  };
+
+  const imageBoxEls = {};   // id -> {box, img, rmBtn}
+  const thumbEls = {};      // id -> row el
+  const imageElsRef = {};   // id -> loaded HTMLImageElement (for export)
+  let dragState = null;
+
+  // ---------- DOM refs ----------
+  const $ = (id) => document.getElementById(id);
+  const fileInput = $("fileInput");
+  const uploadBtn = $("uploadBtn");
+  const presetSelect = $("presetSelect");
+  const customSizeRow = $("customSizeRow");
+  const customWInput = $("customW");
+  const customHInput = $("customH");
+  const orientationGroup = $("orientationGroup");
+  const btnPortrait = $("btnPortrait");
+  const btnLandscape = $("btnLandscape");
+  const btnUnitIn = $("btnUnitIn");
+  const btnUnitCm = $("btnUnitCm");
+  const posterSizeReadout = $("posterSizeReadout");
+  const marginUnitLabel = $("marginUnitLabel");
+  const linkMarginsCb = $("linkMargins");
+  const marginLinkedInput = $("marginLinked");
+  const marginGrid = $("marginGrid");
+  const marginTopInput = $("marginTop");
+  const marginRightInput = $("marginRight");
+  const marginBottomInput = $("marginBottom");
+  const marginLeftInput = $("marginLeft");
+  const spacingSlider = $("spacingSlider");
+  const spacingReadout = $("spacingReadout");
+  const globalScaleSlider = $("globalScaleSlider");
+  const globalScaleReadout = $("globalScaleReadout");
+  const layoutOptionsEl = $("layoutOptions");
+  const imageCountEl = $("imageCount");
+  const emptyNote = $("emptyNote");
+  const thumbListEl = $("thumbList");
+  const selectedPanel = $("selectedPanel");
+  const selectedScaleSlider = $("selectedScaleSlider");
+  const selectedScaleReadout = $("selectedScaleReadout");
+  const showGuidesCb = $("showGuides");
+  const lockArrangementCb = $("lockArrangement");
+  const exportFormatSelect = $("exportFormat");
+  const transparentBgCb = $("transparentBg");
+  const transparentNote = $("transparentNote");
+  const canvasArea = $("canvasArea");
+  const headerSizeReadout = $("headerSizeReadout");
+  const arrangeBtn = $("arrangeBtn");
+  const downloadBtn = $("downloadBtn");
+  const overflowWarning = $("overflowWarning");
+  const dropzone = $("dropzone");
+  const dropzoneIcon = $("dropzoneIcon");
+  const dropzoneBtn = $("dropzoneBtn");
+  const posterWrap = $("posterWrap");
+  const posterEl = $("poster");
+  const marginGuideEl = $("marginGuide");
+
+  // ---------- static content ----------
+  uploadBtn.innerHTML = ICONS.upload + " Add images";
+  arrangeBtn.innerHTML = ICONS.shuffle + " Re-arrange";
+  downloadBtn.innerHTML = ICONS.download + " Download PNG";
+  dropzoneIcon.innerHTML = ICONS.imageOff;
+
+  PRESETS.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.key; opt.textContent = p.label;
+    presetSelect.appendChild(opt);
+  });
+  presetSelect.value = state.presetKey;
+
+  LAYOUT_MODES.forEach((m) => {
+    const btn = document.createElement("button");
+    btn.className = "pgs-layout-btn" + (m.key === state.layoutMode ? " active" : "");
+    btn.dataset.key = m.key;
+    btn.innerHTML = m.icon + '<div><div class="pgs-layout-btn-title">' + m.label + '</div><div class="pgs-layout-btn-desc">' + m.desc + "</div></div>";
+    btn.addEventListener("click", () => {
+      state.layoutMode = m.key;
+      Array.from(layoutOptionsEl.children).forEach((c) => c.classList.toggle("active", c.dataset.key === m.key));
+      fullRelayout();
+    });
+    layoutOptionsEl.appendChild(btn);
+  });
+
+  // ---------- geometry ----------
+  function getBaseDims() {
+    const preset = PRESETS.find((p) => p.key === state.presetKey);
+    let w = preset.key === "custom" ? Number(state.customW) || 1 : preset.w;
+    let h = preset.key === "custom" ? Number(state.customH) || 1 : preset.h;
+    return { w, h };
+  }
+  function getGeometry() {
+    const { w: baseW, h: baseH } = getBaseDims();
+    let posterWIn = Math.min(baseW, baseH);
+    let posterHIn = Math.max(baseW, baseH);
+    if (state.orientation === "landscape") { const t = posterWIn; posterWIn = posterHIn; posterHIn = t; }
+    if (baseW === baseH) { posterWIn = baseW; posterHIn = baseH; }
+    const posterWpx = posterWIn * PX_PER_IN;
+    const posterHpx = posterHIn * PX_PER_IN;
+    const displayScale = Math.min(PREVIEW_MAX_W / posterWpx, PREVIEW_MAX_H / posterHpx, 1);
+    const marginsPx = {
+      top: state.margin.top * PX_PER_IN,
+      right: state.margin.right * PX_PER_IN,
+      bottom: state.margin.bottom * PX_PER_IN,
+      left: state.margin.left * PX_PER_IN
+    };
+    const spacingPx = state.spacing * PX_PER_IN;
+    return { baseW, baseH, posterWIn, posterHIn, posterWpx, posterHpx, displayScale, marginsPx, spacingPx };
+  }
+
+  const toDisplayUnit = (inches) => (state.unit === "cm" ? inches * 2.54 : inches);
+  const fromDisplayUnit = (val) => (state.unit === "cm" ? val / 2.54 : val);
+  const fmt = (n) => (Math.round(n * 100) / 100).toString();
+
+  // ---------- rendering ----------
+  function updatePosterFrame() {
+    const g = getGeometry();
+    orientationGroup.style.display = g.baseW === g.baseH ? "none" : "flex";
+    customSizeRow.style.display = state.presetKey === "custom" ? "flex" : "none";
+    posterSizeReadout.textContent = fmt(toDisplayUnit(g.posterWIn)) + " × " + fmt(toDisplayUnit(g.posterHIn)) + " " + state.unit;
+    headerSizeReadout.textContent = "— " + fmt(toDisplayUnit(g.posterWIn)) + "×" + fmt(toDisplayUnit(g.posterHIn)) + " " + state.unit;
+    marginUnitLabel.textContent = state.unit;
+
+    posterEl.style.width = (g.posterWpx * g.displayScale) + "px";
+    posterEl.style.height = (g.posterHpx * g.displayScale) + "px";
+    marginGuideEl.style.display = state.showGuides ? "block" : "none";
+    marginGuideEl.style.left = (g.marginsPx.left * g.displayScale) + "px";
+    marginGuideEl.style.top = (g.marginsPx.top * g.displayScale) + "px";
+    marginGuideEl.style.width = ((g.posterWpx - g.marginsPx.left - g.marginsPx.right) * g.displayScale) + "px";
+    marginGuideEl.style.height = ((g.posterHpx - g.marginsPx.top - g.marginsPx.bottom) * g.displayScale) + "px";
+
+    // margin input readouts (only refresh values, not while user is actively typing in the same field)
+    if (document.activeElement !== marginLinkedInput) marginLinkedInput.value = fmt(toDisplayUnit(state.margin.top));
+    if (document.activeElement !== marginTopInput) marginTopInput.value = fmt(toDisplayUnit(state.margin.top));
+    if (document.activeElement !== marginRightInput) marginRightInput.value = fmt(toDisplayUnit(state.margin.right));
+    if (document.activeElement !== marginBottomInput) marginBottomInput.value = fmt(toDisplayUnit(state.margin.bottom));
+    if (document.activeElement !== marginLeftInput) marginLeftInput.value = fmt(toDisplayUnit(state.margin.left));
+    if (document.activeElement !== customWInput) customWInput.value = state.customW;
+    if (document.activeElement !== customHInput) customHInput.value = state.customH;
+
+    const hasImages = state.images.length > 0;
+    dropzone.style.display = hasImages ? "none" : "flex";
+    posterWrap.classList.toggle("visible", hasImages);
+    downloadBtn.disabled = !hasImages;
+  }
+
+  function updateImagePosition(im) {
+    const g = getGeometry();
+    const el = imageBoxEls[im.id];
+    if (!el) return;
+    el.box.style.left = (im.x * g.displayScale) + "px";
+    el.box.style.top = (im.y * g.displayScale) + "px";
+    el.box.style.width = (im.w * g.displayScale) + "px";
+    el.box.style.height = (im.h * g.displayScale) + "px";
+  }
+
+  function updateOverflowWarning() {
+    const g = getGeometry();
+    const availH = g.posterHpx - g.marginsPx.top - g.marginsPx.bottom;
+    const contentBottom = state.images.reduce((max, im) => Math.max(max, im.y + im.h), 0);
+    const overflowing = state.images.length > 0 &&
+      contentBottom > g.marginsPx.top + availH + 2 &&
+      (state.layoutMode === "sequential" || state.layoutMode === "justified");
+    overflowWarning.classList.toggle("visible", overflowing);
+  }
+
+  function fullRelayout(force) {
+    updatePosterFrame();
+    if (state.images.length === 0) return;
+    if (state.locked && !force) {
+      // Arrangement is locked: keep every image exactly where it is,
+      // just re-render at the current display scale / poster frame.
+      state.images.forEach(updateImagePosition);
+      updateOverflowWarning();
+      return;
+    }
+    const g = getGeometry();
+    const layout = computeLayout(state.images, state.layoutMode, g.posterWpx, g.posterHpx, g.marginsPx, g.spacingPx, state.globalScale);
+    const map = Object.fromEntries(layout.map((l) => [l.id, l]));
+    state.images.forEach((im) => {
+      const base = map[im.id];
+      if (!base) return;
+      const s = im.sizeScale || 1;
+      const w = base.w * s, h = base.h * s;
+      const cx = base.x + base.w / 2, cy = base.y + base.h / 2;
+      im.baseW = base.w; im.baseH = base.h; im.w = w; im.h = h; im.x = cx - w / 2; im.y = cy - h / 2;
+    });
+    state.images.forEach(updateImagePosition);
+    updateOverflowWarning();
+  }
+
+  // Placement for a brand-new image when the arrangement is locked
+  // (so it doesn't trigger a reflow of everything else).
+  function getDefaultPlacement(natW, natH) {
+    const g = getGeometry();
+    const availW = g.posterWpx - g.marginsPx.left - g.marginsPx.right;
+    const availH = g.posterHpx - g.marginsPx.top - g.marginsPx.bottom;
+    const r = natW / natH;
+    let targetH;
+    if (state.images.length > 0) {
+      targetH = state.images.reduce((s, im) => s + im.h, 0) / state.images.length;
+    } else {
+      targetH = availH * 0.3;
+    }
+    const w = targetH * r;
+    const h = targetH;
+    const cascade = (state.images.length % 6) * 16;
+    const x = g.marginsPx.left + clamp((availW - w) / 2 + cascade, 0, Math.max(0, availW - w));
+    const y = g.marginsPx.top + clamp((availH - h) / 2 + cascade, 0, Math.max(0, availH - h));
+    return { x, y, w, h };
+  }
+
+  // ---------- selection ----------
+  function selectImage(id) {
+    state.selectedId = id;
+    Object.keys(imageBoxEls).forEach((k) => {
+      const isSel = k === id;
+      imageBoxEls[k].box.classList.toggle("selected", isSel);
+      imageBoxEls[k].rmBtn.style.display = isSel ? "flex" : "none";
+    });
+    Object.keys(thumbEls).forEach((k) => thumbEls[k].classList.toggle("selected", k === id));
+    const im = state.images.find((i) => i.id === id);
+    if (im) {
+      selectedPanel.classList.add("visible");
+      selectedScaleSlider.value = im.sizeScale || 1;
+      selectedScaleReadout.textContent = Math.round((im.sizeScale || 1) * 100) + "%";
+    } else {
+      selectedPanel.classList.remove("visible");
+    }
+  }
+
+  // ---------- image add/remove ----------
+  function createImageBox(im) {
+    const box = document.createElement("div");
+    box.className = "pgs-image-box";
+    box.dataset.id = im.id;
+    const img = document.createElement("img");
+    img.src = im.src;
+    img.draggable = false;
+    box.appendChild(img);
+    const rmBtn = document.createElement("div");
+    rmBtn.className = "pgs-image-remove";
+    rmBtn.innerHTML = ICONS.x;
+    rmBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    rmBtn.addEventListener("click", (e) => { e.stopPropagation(); removeImage(im.id); });
+    box.appendChild(rmBtn);
+    box.addEventListener("pointerdown", (e) => onPointerDownImage(e, im.id));
+    box.addEventListener("click", (e) => e.stopPropagation());
+    posterEl.appendChild(box);
+    imageBoxEls[im.id] = { box, img, rmBtn };
+  }
+
+  function createThumb(im) {
+    const row = document.createElement("div");
+    row.className = "pgs-thumb";
+    row.dataset.id = im.id;
+    const img = document.createElement("img");
+    img.src = im.src;
+    const name = document.createElement("span");
+    name.className = "pgs-thumb-name";
+    name.textContent = im.name;
+    const btn = document.createElement("button");
+    btn.innerHTML = ICONS.x;
+    btn.addEventListener("click", (e) => { e.stopPropagation(); removeImage(im.id); });
+    row.appendChild(img); row.appendChild(name); row.appendChild(btn);
+    row.addEventListener("click", () => selectImage(im.id));
+    thumbListEl.appendChild(row);
+    thumbEls[im.id] = row;
+  }
+
+  function refreshImageCount() {
+    imageCountEl.textContent = state.images.length;
+    emptyNote.style.display = state.images.length === 0 ? "block" : "none";
+  }
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
+    for (const file of files) {
+      try {
+        const dataUrl = await readFileAsDataURL(file);
+        const el = await loadImageEl(dataUrl);
+        const id = nextId();
+        imageElsRef[id] = el;
+        const placement = getDefaultPlacement(el.naturalWidth, el.naturalHeight);
+        const im = {
+          id, src: dataUrl, name: file.name, natW: el.naturalWidth, natH: el.naturalHeight,
+          x: placement.x, y: placement.y, w: placement.w, h: placement.h,
+          baseW: placement.w, baseH: placement.h, sizeScale: 1
+        };
+        state.images.push(im);
+        createImageBox(im);
+        createThumb(im);
+        refreshImageCount();
+        fullRelayout();
+      } catch (e) { /* skip unreadable file */ }
+    }
+  }
+
+  function removeImage(id) {
+    state.images = state.images.filter((im) => im.id !== id);
+    if (imageBoxEls[id]) { imageBoxEls[id].box.remove(); delete imageBoxEls[id]; }
+    if (thumbEls[id]) { thumbEls[id].remove(); delete thumbEls[id]; }
+    delete imageElsRef[id];
+    if (state.selectedId === id) selectImage(null);
+    refreshImageCount();
+    fullRelayout();
+  }
+
+  function updateIndividualScale(id, newScale) {
+    const im = state.images.find((i) => i.id === id);
+    if (!im) return;
+    const bw = im.baseW || im.w, bh = im.baseH || im.h;
+    const w = bw * newScale, h = bh * newScale;
+    const cx = im.x + im.w / 2, cy = im.y + im.h / 2;
+    im.sizeScale = newScale; im.w = w; im.h = h; im.x = cx - w / 2; im.y = cy - h / 2;
+    updateImagePosition(im);
+    selectedScaleReadout.textContent = Math.round(newScale * 100) + "%";
+    updateOverflowWarning();
+  }
+
+  // ---------- dragging ----------
+  function onPointerMove(e) {
+    if (!dragState) return;
+    const g = getGeometry();
+    const dx = (e.clientX - dragState.startClientX) / g.displayScale;
+    const dy = (e.clientY - dragState.startClientY) / g.displayScale;
+    const im = state.images.find((i) => i.id === dragState.id);
+    if (!im) return;
+    im.x = dragState.startX + dx;
+    im.y = dragState.startY + dy;
+    updateImagePosition(im);
+  }
+  function onPointerUp() {
+    dragState = null;
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    updateOverflowWarning();
+  }
+  function onPointerDownImage(e, id) {
+    e.stopPropagation();
+    selectImage(id);
+    const im = state.images.find((i) => i.id === id);
+    dragState = { id, startClientX: e.clientX, startClientY: e.clientY, startX: im.x, startY: im.y };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }
+
+  // ---------- export ----------
+  let jsPDFLoadingPromise = null;
+  function ensureJsPDFLoaded() {
+    if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
+    if (jsPDFLoadingPromise) return jsPDFLoadingPromise;
+    jsPDFLoadingPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => { jsPDFLoadingPromise = null; reject(new Error("Could not load the PDF export library")); };
+      document.head.appendChild(script);
+    });
+    return jsPDFLoadingPromise;
+  }
+
+  function updateExportUI() {
+    const isPng = state.exportFormat === "png";
+    transparentBgCb.disabled = !isPng;
+    if (!isPng) { transparentBgCb.checked = false; state.transparentBg = false; }
+    transparentNote.textContent = isPng
+      ? "Renders the poster without a white page behind it."
+      : "Only available for PNG (JPG and PDF always have a solid background).";
+    downloadBtn.innerHTML = ICONS.download + " Download " + state.exportFormat.toUpperCase();
+    posterEl.classList.toggle("checkerboard", isPng && state.transparentBg);
+  }
+
+  async function exportPoster() {
+    if (state.images.length === 0) return;
+    downloadBtn.disabled = true;
+    const prevLabel = downloadBtn.innerHTML;
+    downloadBtn.innerHTML = ICONS.download + " Exporting…";
+    try {
+      const g = getGeometry();
+      const factor = EXPORT_DPI / PX_PER_IN;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(g.posterWpx * factor);
+      canvas.height = Math.round(g.posterHpx * factor);
+      const ctx = canvas.getContext("2d");
+      const wantTransparent = state.exportFormat === "png" && state.transparentBg;
+      if (!wantTransparent) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      for (const im of state.images) {
+        let el = imageElsRef[im.id];
+        if (!el) { el = await loadImageEl(im.src); imageElsRef[im.id] = el; }
+        ctx.drawImage(el, im.x * factor, im.y * factor, im.w * factor, im.h * factor);
+      }
+
+      if (state.exportFormat === "pdf") {
+        await ensureJsPDFLoaded();
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+          orientation: g.posterWIn >= g.posterHIn ? "landscape" : "portrait",
+          unit: "in",
+          format: [g.posterWIn, g.posterHIn]
+        });
+        const dataUrl = canvas.toDataURL("image/png");
+        pdf.addImage(dataUrl, "PNG", 0, 0, g.posterWIn, g.posterHIn);
+        pdf.save("poster.pdf");
+      } else {
+        const isJpg = state.exportFormat === "jpg";
+        const mime = isJpg ? "image/jpeg" : "image/png";
+        const url = isJpg ? canvas.toDataURL(mime, 0.92) : canvas.toDataURL(mime);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "poster." + (isJpg ? "jpg" : state.exportFormat);
+        a.click();
+      }
+    } catch (err) {
+      alert("Export failed" + (err && err.message ? ": " + err.message : "") + ". PDF export needs an internet connection the first time, to load a small library.");
+    } finally {
+      downloadBtn.disabled = state.images.length === 0;
+      downloadBtn.innerHTML = prevLabel;
+    }
+  }
+
+  // ---------- wiring ----------
+  uploadBtn.addEventListener("click", () => fileInput.click());
+  dropzoneBtn.addEventListener("click", (e) => { e.stopPropagation(); fileInput.click(); });
+  dropzone.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", (e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ""; });
+
+  [dropzone, posterEl].forEach((el) => {
+    el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("over"); });
+    el.addEventListener("dragleave", () => el.classList.remove("over"));
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      el.classList.remove("over");
+      if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+    });
+  });
+
+  presetSelect.addEventListener("change", (e) => { state.presetKey = e.target.value; fullRelayout(); });
+  customWInput.addEventListener("input", (e) => { state.customW = e.target.value; fullRelayout(); });
+  customHInput.addEventListener("input", (e) => { state.customH = e.target.value; fullRelayout(); });
+
+  btnPortrait.addEventListener("click", () => {
+    state.orientation = "portrait";
+    btnPortrait.classList.add("active"); btnLandscape.classList.remove("active");
+    fullRelayout();
+  });
+  btnLandscape.addEventListener("click", () => {
+    state.orientation = "landscape";
+    btnLandscape.classList.add("active"); btnPortrait.classList.remove("active");
+    fullRelayout();
+  });
+
+  btnUnitIn.addEventListener("click", () => {
+    state.unit = "in";
+    btnUnitIn.classList.add("active"); btnUnitCm.classList.remove("active");
+    updatePosterFrame();
+  });
+  btnUnitCm.addEventListener("click", () => {
+    state.unit = "cm";
+    btnUnitCm.classList.add("active"); btnUnitIn.classList.remove("active");
+    updatePosterFrame();
+  });
+
+  linkMarginsCb.addEventListener("change", (e) => {
+    state.linkMargins = e.target.checked;
+    marginLinkedInput.style.display = state.linkMargins ? "block" : "none";
+    marginGrid.style.display = state.linkMargins ? "none" : "grid";
+    if (state.linkMargins) {
+      const v = state.margin.top;
+      state.margin = { top: v, right: v, bottom: v, left: v };
+      fullRelayout();
+    }
+  });
+
+  marginLinkedInput.addEventListener("input", (e) => {
+    const inches = fromDisplayUnit(Number(e.target.value) || 0);
+    state.margin = { top: inches, right: inches, bottom: inches, left: inches };
+    fullRelayout();
+  });
+  marginTopInput.addEventListener("input", (e) => { state.margin.top = fromDisplayUnit(Number(e.target.value) || 0); fullRelayout(); });
+  marginRightInput.addEventListener("input", (e) => { state.margin.right = fromDisplayUnit(Number(e.target.value) || 0); fullRelayout(); });
+  marginBottomInput.addEventListener("input", (e) => { state.margin.bottom = fromDisplayUnit(Number(e.target.value) || 0); fullRelayout(); });
+  marginLeftInput.addEventListener("input", (e) => { state.margin.left = fromDisplayUnit(Number(e.target.value) || 0); fullRelayout(); });
+
+  spacingSlider.addEventListener("input", (e) => {
+    state.spacing = Number(e.target.value);
+    spacingReadout.textContent = fmt(toDisplayUnit(state.spacing)) + " " + state.unit;
+    fullRelayout();
+  });
+  globalScaleSlider.addEventListener("input", (e) => {
+    state.globalScale = Number(e.target.value);
+    globalScaleReadout.textContent = Math.round(state.globalScale * 100) + "%";
+    fullRelayout();
+  });
+  selectedScaleSlider.addEventListener("input", (e) => {
+    if (state.selectedId) updateIndividualScale(state.selectedId, Number(e.target.value));
+  });
+  showGuidesCb.addEventListener("change", (e) => { state.showGuides = e.target.checked; updatePosterFrame(); });
+  lockArrangementCb.addEventListener("change", (e) => { state.locked = e.target.checked; });
+  exportFormatSelect.addEventListener("change", (e) => { state.exportFormat = e.target.value; updateExportUI(); });
+  transparentBgCb.addEventListener("change", (e) => { state.transparentBg = e.target.checked; updateExportUI(); });
+
+  arrangeBtn.addEventListener("click", (e) => { e.stopPropagation(); fullRelayout(true); });
+  downloadBtn.addEventListener("click", (e) => { e.stopPropagation(); exportPoster(); });
+
+  canvasArea.addEventListener("click", () => selectImage(null));
+  posterEl.addEventListener("click", (e) => { if (e.target === posterEl) selectImage(null); });
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "Delete" || e.key === "Backspace") && state.selectedId) {
+      const active = document.activeElement;
+      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+      e.preventDefault();
+      removeImage(state.selectedId);
+    }
+  });
+
+  // ---------- initial paint ----------
+  spacingSlider.value = state.spacing;
+  spacingReadout.textContent = fmt(toDisplayUnit(state.spacing)) + " " + state.unit;
+  globalScaleSlider.value = state.globalScale;
+  globalScaleReadout.textContent = Math.round(state.globalScale * 100) + "%";
+  updatePosterFrame();
+  updateExportUI();
+  refreshImageCount();
+})();
+</script>
+</body>
+</html>

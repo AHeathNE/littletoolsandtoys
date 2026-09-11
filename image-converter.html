@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Format Swap — image converter</title>
+<style>
+  @font-face {
+    font-family: 'Fallback';
+    src: local('Georgia');
+  }
+  :root {
+    --ink: #1b1a17;
+    --paper: #efe9dd;
+    --paper-raised: #f7f3ea;
+    --brass: #8a6d3b;
+    --brass-dark: #5f4a24;
+    --rust: #a3401f;
+    --line: #c9bfa8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    min-height: 100%;
+  }
+  body {
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px 80px;
+  }
+  .sheet {
+    width: 100%;
+    max-width: 640px;
+  }
+  .masthead {
+    text-align: left;
+    border-bottom: 3px double var(--ink);
+    padding-bottom: 14px;
+    margin-bottom: 30px;
+  }
+  .masthead .kicker {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--brass-dark);
+    margin: 0 0 6px;
+  }
+  .masthead h1 {
+    font-size: 40px;
+    line-height: 1;
+    margin: 0;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .masthead p {
+    margin: 10px 0 0;
+    font-size: 15px;
+    color: #4b473e;
+    max-width: 46ch;
+  }
+
+  .dropzone {
+    position: relative;
+    border: 2px solid var(--ink);
+    background: var(--paper-raised);
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .dropzone.drag {
+    background: #e8dcc0;
+    border-color: var(--rust);
+  }
+  .dropzone input { display: none; }
+  .dropzone .glyph {
+    font-size: 28px;
+    display: block;
+    margin-bottom: 10px;
+  }
+  .dropzone .primary {
+    font-size: 17px;
+    margin: 0 0 4px;
+  }
+  .dropzone .secondary {
+    font-size: 13px;
+    color: #7a7566;
+    font-family: 'Courier New', monospace;
+  }
+
+  .worklist {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .item {
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+  }
+  .item .thumb {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border: 1px solid var(--line);
+    background: repeating-conic-gradient(#e2dac2 0% 25%, #ece5d3 0% 50%) 50% / 12px 12px;
+  }
+  .item .meta {
+    min-width: 0;
+  }
+  .item .fname {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .item .fsub {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #7a7566;
+    margin-top: 2px;
+  }
+  .item .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  select {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    color: var(--ink);
+  }
+  .btn {
+    font-family: Georgia, serif;
+    font-size: 13px;
+    padding: 7px 14px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--ink);
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--brass-dark); border-color: var(--brass-dark); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn.ghost:hover { border-color: var(--ink); }
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    background: var(--ink);
+  }
+  .btn.done {
+    background: var(--rust);
+    border-color: var(--rust);
+  }
+
+  .footerbar {
+    margin-top: 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #7a7566;
+    font-family: 'Courier New', monospace;
+  }
+  .footerbar button {
+    font-family: 'Courier New', monospace;
+    background: none;
+    border: none;
+    color: var(--brass-dark);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+  }
+
+  .note {
+    margin-top: 34px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: #7a7566;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="masthead">
+    <p class="kicker">NO. 1 · A DESKTOP CONVERSION UTILITY</p>
+    <h1>Format Swap</h1>
+    <p>Drop images in, choose a format, get a new file out. Everything happens in this browser tab — nothing is uploaded anywhere.</p>
+  </div>
+
+  <div class="dropzone" id="dropzone">
+    <span class="glyph">✎</span>
+    <p class="primary">Drop images here, or click to browse</p>
+    <p class="secondary">PNG · JPG · WEBP · GIF · BMP</p>
+    <input type="file" id="fileInput" multiple accept="image/*">
+  </div>
+
+  <div class="worklist" id="worklist"></div>
+
+  <div class="footerbar" id="footerbar" style="display:none;">
+    <span id="countLabel"></span>
+    <button id="clearAll">clear all</button>
+  </div>
+
+  <div class="note">
+    Conversion runs locally using the canvas element built into your browser — the file never leaves your machine. JPG output has no transparency; transparent areas will be filled white.
+  </div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const worklist = document.getElementById('worklist');
+const footerbar = document.getElementById('footerbar');
+const countLabel = document.getElementById('countLabel');
+const clearAll = document.getElementById('clearAll');
+
+let items = [];
+let idCounter = 0;
+
+const FORMATS = [
+  { label: 'PNG', mime: 'image/png', ext: 'png' },
+  { label: 'JPG', mime: 'image/jpeg', ext: 'jpg' },
+  { label: 'WEBP', mime: 'image/webp', ext: 'webp' },
+];
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(fileList) {
+  Array.from(fileList).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const id = 'f' + (idCounter++);
+    const url = URL.createObjectURL(file);
+    const sourceExt = (file.name.split('.').pop() || '').toLowerCase();
+    let defaultTarget = 'image/png';
+    if (sourceExt === 'png') defaultTarget = 'image/jpeg';
+    items.push({
+      id, file, url,
+      name: file.name,
+      size: file.size,
+      target: defaultTarget,
+      resultUrl: null,
+      resultBlob: null,
+    });
+  });
+  render();
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function render() {
+  worklist.innerHTML = '';
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'item';
+
+    const thumb = document.createElement('img');
+    thumb.className = 'thumb';
+    thumb.src = item.url;
+    row.appendChild(thumb);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const fname = document.createElement('div');
+    fname.className = 'fname';
+    fname.textContent = item.name;
+    const fsub = document.createElement('div');
+    fsub.className = 'fsub';
+    fsub.textContent = formatBytes(item.size);
+    meta.appendChild(fname);
+    meta.appendChild(fsub);
+    row.appendChild(meta);
+
+    const controls = document.createElement('div');
+    controls.className = 'controls';
+
+    const select = document.createElement('select');
+    FORMATS.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.mime;
+      opt.textContent = '→ ' + f.label;
+      if (f.mime === item.target) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.addEventListener('change', () => {
+      item.target = select.value;
+      item.resultUrl = null;
+      render();
+    });
+    controls.appendChild(select);
+
+    if (item.resultUrl) {
+      const link = document.createElement('a');
+      link.href = item.resultUrl;
+      link.download = item.downloadName;
+      link.className = 'btn done';
+      link.textContent = 'Download';
+      controls.appendChild(link);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Convert';
+      btn.addEventListener('click', () => convertItem(item));
+      controls.appendChild(btn);
+    }
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn ghost';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove';
+    removeBtn.addEventListener('click', () => {
+      items = items.filter(i => i.id !== item.id);
+      render();
+    });
+    controls.appendChild(removeBtn);
+
+    row.appendChild(controls);
+    worklist.appendChild(row);
+  });
+
+  footerbar.style.display = items.length ? 'flex' : 'none';
+  countLabel.textContent = items.length + (items.length === 1 ? ' file' : ' files');
+}
+
+function convertItem(item) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (item.target === 'image/jpeg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(img, 0, 0);
+    canvas.toBlob(blob => {
+      if (!blob) {
+        alert('Conversion to this format is not supported by your browser.');
+        return;
+      }
+      const fmt = FORMATS.find(f => f.mime === item.target);
+      const baseName = item.name.replace(/\.[^.]+$/, '');
+      item.resultBlob = blob;
+      item.resultUrl = URL.createObjectURL(blob);
+      item.downloadName = baseName + '.' + fmt.ext;
+      render();
+    }, item.target, 0.92);
+  };
+  img.src = item.url;
+}
+
+clearAll.addEventListener('click', () => {
+  items = [];
+  render();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Splitter</title>
+<style>
+  :root {
+    --bg: #101314;
+    --panel: #171b1c;
+    --line: #2a3032;
+    --text: #e7ebe9;
+    --dim: #8a9a97;
+    --accent: #6fe3c4;
+    --accent-dim: #2f4a44;
+    --mono: 'SF Mono', 'IBM Plex Mono', 'Menlo', ui-monospace, monospace;
+    --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 32px 20px 60px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+
+  header { margin-bottom: 28px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 6px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  .sub { color: var(--dim); font-size: 14px; margin: 0; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  label { font-size: 12px; color: var(--dim); display: block; margin-bottom: 8px; }
+
+  textarea {
+    width: 100%;
+    min-height: 180px;
+    background: #0c0f0f;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.6;
+    padding: 14px;
+    resize: vertical;
+  }
+  textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .stats {
+    display: flex;
+    gap: 18px;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+  }
+  .stats b { color: var(--text); font-weight: 600; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-end;
+    margin-top: 16px;
+  }
+
+  .mode-group { display: flex; gap: 8px; }
+  .mode-btn {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--dim);
+    padding: 9px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .mode-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  input[type="number"] {
+    width: 110px;
+    background: #0c0f0f;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13.5px;
+    padding: 9px 10px;
+  }
+
+  .checkline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--dim);
+  }
+  .checkline input { accent-color: var(--accent); }
+
+  .split-btn {
+    margin-left: auto;
+    background: var(--accent);
+    color: #0a1210;
+    border: none;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    padding: 11px 22px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .split-btn:hover { filter: brightness(1.08); }
+
+  .results-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .results-head .eyebrow { margin: 0; }
+  .copy-all {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .copy-all:hover { color: var(--text); border-color: var(--dim); }
+
+  .chunk {
+    background: #0c0f0f;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .chunk-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .chunk-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .chunk-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .chunk-copy {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .chunk-copy:hover { color: var(--accent); border-color: var(--accent); }
+  .chunk-copy.copied { color: var(--accent); border-color: var(--accent); }
+  .chunk-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+  }
+
+  .empty {
+    color: var(--dim);
+    font-size: 13px;
+    font-family: var(--mono);
+    text-align: center;
+    padding: 30px 0;
+  }
+
+  @media (max-width: 600px) {
+    .split-btn { margin-left: 0; width: 100%; }
+    .controls { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">/// text splitter</p>
+    <h1>Break text into chunks</h1>
+    <p class="sub">Split by character count, word count, or number of parts.</p>
+  </header>
+
+  <div class="panel">
+    <label for="input">Source text</label>
+    <textarea id="input" placeholder="Paste or type your text here…"></textarea>
+    <div class="stats">
+      <span>Characters: <b id="charCount">0</b></span>
+      <span>Words: <b id="wordCount">0</b></span>
+    </div>
+
+    <div class="controls">
+      <div class="field">
+        <label>Split by</label>
+        <div class="mode-group">
+          <button class="mode-btn active" data-mode="char">Characters</button>
+          <button class="mode-btn" data-mode="word">Words</button>
+          <button class="mode-btn" data-mode="parts">Parts</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label id="amountLabel">Characters per chunk</label>
+        <input type="number" id="amount" value="500" min="1">
+      </div>
+
+      <div class="field" id="boundaryField">
+        <label>&nbsp;</label>
+        <div class="checkline">
+          <input type="checkbox" id="respectWords" checked>
+          <label for="respectWords" style="margin:0;">Avoid splitting mid-word</label>
+        </div>
+      </div>
+
+      <button class="split-btn" id="splitBtn">Split text</button>
+    </div>
+  </div>
+
+  <div class="panel" id="resultsPanel">
+    <div class="results-head">
+      <p class="eyebrow" id="resultsLabel">/// output</p>
+      <button class="copy-all" id="copyAllBtn" style="display:none;">Copy all, separated</button>
+    </div>
+    <div id="results"><div class="empty">Your chunks will appear here.</div></div>
+  </div>
+</div>
+
+<script>
+const inputEl = document.getElementById('input');
+const charCountEl = document.getElementById('charCount');
+const wordCountEl = document.getElementById('wordCount');
+const amountEl = document.getElementById('amount');
+const amountLabel = document.getElementById('amountLabel');
+const boundaryField = document.getElementById('boundaryField');
+const respectWords = document.getElementById('respectWords');
+const resultsEl = document.getElementById('results');
+const resultsLabel = document.getElementById('resultsLabel');
+const copyAllBtn = document.getElementById('copyAllBtn');
+const splitBtn = document.getElementById('splitBtn');
+
+let mode = 'char';
+let lastChunks = [];
+
+function wordsOf(str) {
+  return str.trim().length ? str.trim().split(/\s+/) : [];
+}
+
+function updateStats() {
+  const text = inputEl.value;
+  charCountEl.textContent = text.length;
+  wordCountEl.textContent = wordsOf(text).length;
+}
+inputEl.addEventListener('input', updateStats);
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+
+    if (mode === 'char') {
+      amountLabel.textContent = 'Characters per chunk';
+      amountEl.value = 500;
+      boundaryField.style.display = '';
+    } else if (mode === 'word') {
+      amountLabel.textContent = 'Words per chunk';
+      amountEl.value = 100;
+      boundaryField.style.display = 'none';
+    } else {
+      amountLabel.textContent = 'Number of parts';
+      amountEl.value = 4;
+      boundaryField.style.display = 'none';
+    }
+  });
+});
+
+function splitByChars(text, size, avoidMidWord) {
+  const chunks = [];
+  let i = 0;
+  while (i < text.length) {
+    let end = Math.min(i + size, text.length);
+    if (avoidMidWord && end < text.length) {
+      let boundary = end;
+      while (boundary > i && !/\s/.test(text[boundary])) boundary--;
+      if (boundary > i) end = boundary;
+    }
+    chunks.push(text.slice(i, end));
+    i = end;
+    while (i < text.length && /\s/.test(text[i]) && text[i] !== '\n') i++;
+  }
+  return chunks.filter(c => c.length > 0);
+}
+
+function splitByWords(text, size) {
+  const words = wordsOf(text);
+  const chunks = [];
+  for (let i = 0; i < words.length; i += size) {
+    chunks.push(words.slice(i, i + size).join(' '));
+  }
+  return chunks;
+}
+
+function splitIntoParts(text, parts) {
+  const total = text.length;
+  const base = Math.floor(total / parts);
+  const remainder = total % parts;
+  const chunks = [];
+  let i = 0;
+  for (let p = 0; p < parts; p++) {
+    let size = base + (p < remainder ? 1 : 0);
+    let end = Math.min(i + size, total);
+    // try not to cut mid-word for readability
+    if (end < total) {
+      let boundary = end;
+      let limit = i + 1;
+      while (boundary > limit && !/\s/.test(text[boundary])) boundary--;
+      if (boundary > limit) end = boundary;
+    }
+    chunks.push(text.slice(i, end));
+    i = end;
+    while (i < total && /\s/.test(text[i]) && text[i] !== '\n') i++;
+  }
+  return chunks.filter(c => c.length > 0);
+}
+
+function render(chunks) {
+  lastChunks = chunks;
+  if (!chunks.length) {
+    resultsEl.innerHTML = '<div class="empty">Nothing to split — paste some text above.</div>';
+    copyAllBtn.style.display = 'none';
+    resultsLabel.textContent = '/// output';
+    return;
+  }
+  resultsLabel.textContent = `/// output — ${chunks.length} chunk${chunks.length > 1 ? 's' : ''}`;
+  copyAllBtn.style.display = '';
+  resultsEl.innerHTML = chunks.map((chunk, idx) => {
+    const cCount = chunk.length;
+    const wCount = wordsOf(chunk).length;
+    return `
+      <div class="chunk">
+        <div class="chunk-head">
+          <span class="chunk-num">CHUNK ${String(idx + 1).padStart(2, '0')}</span>
+          <span class="chunk-meta">${cCount} chars · ${wCount} words</span>
+          <button class="chunk-copy" data-idx="${idx}">Copy</button>
+        </div>
+        <div class="chunk-text">${escapeHtml(chunk)}</div>
+      </div>
+    `;
+  }).join('');
+
+  document.querySelectorAll('.chunk-copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      navigator.clipboard.writeText(lastChunks[idx]).then(() => {
+        btn.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1200);
+      });
+    });
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function doSplit() {
+  const text = inputEl.value;
+  const amount = Math.max(1, parseInt(amountEl.value, 10) || 1);
+  if (!text.trim()) { render([]); return; }
+
+  let chunks;
+  if (mode === 'char') {
+    chunks = splitByChars(text, amount, respectWords.checked);
+  } else if (mode === 'word') {
+    chunks = splitByWords(text, amount);
+  } else {
+    chunks = splitIntoParts(text, amount);
+  }
+  render(chunks);
+}
+
+splitBtn.addEventListener('click', doSplit);
+
+copyAllBtn.addEventListener('click', () => {
+  const combined = lastChunks.map((c, i) => `--- Chunk ${i + 1} ---\n${c}`).join('\n\n');
+  navigator.clipboard.writeText(combined).then(() => {
+    copyAllBtn.textContent = 'Copied ✓';
+    setTimeout(() => { copyAllBtn.textContent = 'Copy all, separated'; }, 1200);
+  });
+});
+
+updateStats();
+</script>
+</body>
+</html>

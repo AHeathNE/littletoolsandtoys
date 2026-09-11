@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Image → X Grid</title>
+<style>
+  :root{
+    --bg: #0f0f10;
+    --panel: #17171a;
+    --panel-border: #2a2a2e;
+    --ink: #ececec;
+    --dim: #8b8b90;
+    --accent: #ff5a1f;
+    --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family: var(--mono);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:20px 24px 14px;
+    border-bottom:1px solid var(--panel-border);
+    display:flex;
+    align-items:baseline;
+    gap:14px;
+  }
+  header h1{
+    font-size:15px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    margin:0;
+    font-weight:700;
+  }
+  header h1 span{color:var(--accent);}
+  header p{margin:0; color:var(--dim); font-size:12px;}
+
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns: 280px 1fr;
+    min-height:0;
+  }
+  @media (max-width: 800px){
+    main{grid-template-columns: 1fr;}
+  }
+
+  aside{
+    border-right:1px solid var(--panel-border);
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+    overflow-y:auto;
+  }
+  .field{display:flex; flex-direction:column; gap:6px;}
+  .field label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--dim);
+    display:flex;
+    justify-content:space-between;
+  }
+  .field label b{color:var(--ink); font-weight:600;}
+  input[type=range]{
+    -webkit-appearance:none;
+    width:100%;
+    height:2px;
+    background:var(--panel-border);
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:12px;height:12px;
+    background:var(--accent);
+    border-radius:50%;
+    cursor:pointer;
+  }
+  input[type=color]{
+    -webkit-appearance:none;
+    width:100%;
+    height:32px;
+    border:1px solid var(--panel-border);
+    background:none;
+    border-radius:2px;
+    padding:0;
+    cursor:pointer;
+  }
+  select, input[type=number]{
+    background:var(--panel);
+    color:var(--ink);
+    border:1px solid var(--panel-border);
+    border-radius:2px;
+    padding:7px 8px;
+    font-family:var(--mono);
+    font-size:12px;
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .toggle{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--dim);
+  }
+  .toggle input{accent-color:var(--accent);}
+
+  .dropzone{
+    border:1px dashed var(--panel-border);
+    border-radius:4px;
+    padding:22px 14px;
+    text-align:center;
+    font-size:11px;
+    color:var(--dim);
+    cursor:pointer;
+    transition:border-color .15s, color .15s;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--accent);
+    color:var(--ink);
+  }
+  .dropzone input{display:none;}
+  .filename{font-size:11px; color:var(--ink); word-break:break-all;}
+
+  button.primary{
+    margin-top:auto;
+    background:var(--accent);
+    color:#1a0a00;
+    border:none;
+    padding:12px;
+    font-family:var(--mono);
+    font-weight:700;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    font-size:12px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  button.primary:disabled{
+    background:var(--panel-border);
+    color:var(--dim);
+    cursor:not-allowed;
+  }
+  button.primary:hover:not(:disabled){filter:brightness(1.08);}
+
+  .stats{font-size:10.5px; color:var(--dim); line-height:1.6;}
+
+  .stage{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    overflow:auto;
+    min-height:0;
+  }
+  .canvas-wrap{
+    background:#000;
+    border:1px solid var(--panel-border);
+    max-width:100%;
+    max-height:100%;
+    display:flex;
+  }
+  .canvas-wrap svg{display:block; max-width:100%; height:auto;}
+
+  .empty{
+    color:var(--dim);
+    text-align:center;
+    font-size:12px;
+    max-width:280px;
+    line-height:1.7;
+  }
+  .empty b{color:var(--ink);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Image <span>→</span> X Grid</h1>
+  <p>upload · tune · export SVG</p>
+</header>
+
+<main>
+  <aside>
+    <div class="field">
+      <label>Source image</label>
+      <label class="dropzone" id="dropzone">
+        <span id="dzText">Drop an image or click to choose</span>
+        <input type="file" id="fileInput" accept="image/*">
+      </label>
+      <div class="filename" id="filename"></div>
+    </div>
+
+    <div class="field">
+      <label>Grid columns <b id="colsVal">70</b></label>
+      <input type="range" id="cols" min="10" max="200" value="70">
+    </div>
+
+    <div class="field">
+      <label>Cell size (px) <b id="cellVal">16</b></label>
+      <input type="range" id="cell" min="6" max="40" value="16">
+    </div>
+
+    <div class="field">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="variable">Variable size (tone-mapped)</option>
+        <option value="threshold">Threshold (on/off)</option>
+      </select>
+    </div>
+
+    <div class="field" id="thresholdField" style="display:none;">
+      <label>Threshold <b id="threshVal">128</b></label>
+      <input type="range" id="thresh" min="0" max="255" value="128">
+    </div>
+
+    <div class="field">
+      <label>Min / Max X size <b id="sizeRangeVal">0.15 – 1.0</b></label>
+      <div class="row2">
+        <input type="range" id="minSize" min="0" max="100" value="15">
+        <input type="range" id="maxSize" min="0" max="100" value="100">
+      </div>
+    </div>
+
+    <div class="toggle">
+      <span>Invert tone</span>
+      <input type="checkbox" id="invert">
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label>X color</label>
+        <input type="color" id="fgColor" value="#ff5a1f">
+      </div>
+      <div class="field">
+        <label>Background</label>
+        <input type="color" id="bgColor" value="#0f0f10">
+      </div>
+    </div>
+
+    <div class="toggle">
+      <span>Transparent bg</span>
+      <input type="checkbox" id="transparentBg">
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <button class="primary" id="exportBtn" disabled>Download SVG</button>
+  </aside>
+
+  <div class="stage" id="stage">
+    <div class="empty" id="emptyMsg">Upload an image to generate an <b>X grid</b>. Each cell becomes an X sized or toggled by that cell's brightness. Adjust settings, then export the exact result as SVG.</div>
+  </div>
+</main>
+
+<script>
+(function(){
+  const fileInput = document.getElementById('fileInput');
+  const dropzone = document.getElementById('dropzone');
+  const dzText = document.getElementById('dzText');
+  const filenameEl = document.getElementById('filename');
+  const stage = document.getElementById('stage');
+  const emptyMsg = document.getElementById('emptyMsg');
+  const exportBtn = document.getElementById('exportBtn');
+  const statsEl = document.getElementById('stats');
+
+  const colsInput = document.getElementById('cols');
+  const cellInput = document.getElementById('cell');
+  const modeInput = document.getElementById('mode');
+  const threshField = document.getElementById('thresholdField');
+  const threshInput = document.getElementById('thresh');
+  const minSizeInput = document.getElementById('minSize');
+  const maxSizeInput = document.getElementById('maxSize');
+  const invertInput = document.getElementById('invert');
+  const fgColorInput = document.getElementById('fgColor');
+  const bgColorInput = document.getElementById('bgColor');
+  const transparentBgInput = document.getElementById('transparentBg');
+
+  const colsVal = document.getElementById('colsVal');
+  const cellVal = document.getElementById('cellVal');
+  const threshVal = document.getElementById('threshVal');
+  const sizeRangeVal = document.getElementById('sizeRangeVal');
+
+  let img = null;
+  let imageData = null;
+  let srcW = 0, srcH = 0;
+  let currentSvgString = '';
+
+  function escapeXml(s){ return s; }
+
+  function readFile(file){
+    if(!file || !file.type.startsWith('image/')) return;
+    filenameEl.textContent = file.name;
+    dzText.textContent = 'Change image';
+    const reader = new FileReader();
+    reader.onload = e => {
+      const image = new Image();
+      image.onload = () => {
+        img = image;
+        srcW = image.naturalWidth;
+        srcH = image.naturalHeight;
+        const off = document.createElement('canvas');
+        off.width = srcW; off.height = srcH;
+        const ctx = off.getContext('2d');
+        ctx.drawImage(image, 0, 0);
+        imageData = ctx.getImageData(0, 0, srcW, srcH);
+        render();
+      };
+      image.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  fileInput.addEventListener('change', e => readFile(e.target.files[0]));
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+  });
+
+  function avgBrightness(x0, y0, x1, y1){
+    const data = imageData.data;
+    let sum = 0, count = 0;
+    const stepX = Math.max(1, Math.floor((x1-x0)/8));
+    const stepY = Math.max(1, Math.floor((y1-y0)/8));
+    for(let y = y0; y < y1; y += stepY){
+      for(let x = x0; x < x1; x += stepX){
+        const i = (y * srcW + x) * 4;
+        const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+        const lum = (0.299*r + 0.587*g + 0.114*b);
+        sum += lum * (a/255) + 255*(1 - a/255);
+        count++;
+      }
+    }
+    return count ? sum / count : 255;
+  }
+
+  function buildSvg(){
+    const cols = parseInt(colsInput.value, 10);
+    const cell = parseInt(cellInput.value, 10);
+    const rows = Math.max(1, Math.round(cols * (srcH / srcW)));
+    const mode = modeInput.value;
+    const threshold = parseInt(threshInput.value, 10);
+    const minSize = parseInt(minSizeInput.value, 10) / 100;
+    const maxSize = parseInt(maxSizeInput.value, 10) / 100;
+    const invert = invertInput.checked;
+    const fg = fgColorInput.value;
+    const bg = bgColorInput.value;
+    const transparent = transparentBgInput.checked;
+
+    const W = cols * cell;
+    const H = rows * cell;
+
+    let cellsRendered = 0;
+    let parts = [];
+    parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`);
+    if(!transparent){
+      parts.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="${bg}"/>`);
+    }
+    parts.push(`<g font-family="monospace" font-weight="700" fill="${fg}" text-anchor="middle" dominant-baseline="central">`);
+
+    for(let ry = 0; ry < rows; ry++){
+      const y0 = Math.floor((ry / rows) * srcH);
+      const y1 = Math.max(y0+1, Math.floor(((ry+1) / rows) * srcH));
+      for(let rx = 0; rx < cols; rx++){
+        const x0 = Math.floor((rx / cols) * srcW);
+        const x1 = Math.max(x0+1, Math.floor(((rx+1) / cols) * srcW));
+        let b = avgBrightness(x0, y0, x1, y1) / 255; // 0 dark .. 1 light
+        let darkness = 1 - b; // 0 light .. 1 dark
+        if(invert) darkness = 1 - darkness;
+
+        const cx = rx * cell + cell/2;
+        const cy = ry * cell + cell/2;
+
+        if(mode === 'threshold'){
+          const t = threshold / 255;
+          if(darkness >= (1 - t)){
+            const fs = cell * maxSize;
+            parts.push(`<text x="${cx}" y="${cy}" font-size="${fs.toFixed(2)}">X</text>`);
+            cellsRendered++;
+          }
+        } else {
+          const scale = minSize + darkness * (maxSize - minSize);
+          if(scale > 0.02){
+            const fs = cell * scale;
+            parts.push(`<text x="${cx}" y="${cy}" font-size="${fs.toFixed(2)}">X</text>`);
+            cellsRendered++;
+          }
+        }
+      }
+    }
+    parts.push('</g></svg>');
+    statsEl.textContent = `${cols} × ${rows} grid  ·  ${cellsRendered} X's  ·  ${W}×${H}px`;
+    return parts.join('');
+  }
+
+  function render(){
+    if(!imageData){ return; }
+    emptyMsg.style.display = 'none';
+    currentSvgString = buildSvg();
+    let wrap = stage.querySelector('.canvas-wrap');
+    if(!wrap){
+      wrap = document.createElement('div');
+      wrap.className = 'canvas-wrap';
+      stage.innerHTML = '';
+      stage.appendChild(wrap);
+    }
+    wrap.innerHTML = currentSvgString;
+    exportBtn.disabled = false;
+  }
+
+  function debounce(fn, ms){
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+  const debouncedRender = debounce(render, 60);
+
+  [colsInput, cellInput, modeInput, threshInput, minSizeInput, maxSizeInput,
+   invertInput, fgColorInput, bgColorInput, transparentBgInput].forEach(el => {
+    el.addEventListener('input', () => {
+      colsVal.textContent = colsInput.value;
+      cellVal.textContent = cellInput.value;
+      threshVal.textContent = threshInput.value;
+      sizeRangeVal.textContent = `${(minSizeInput.value/100).toFixed(2)} – ${(maxSizeInput.value/100).toFixed(2)}`;
+      threshField.style.display = modeInput.value === 'threshold' ? 'flex' : 'none';
+      debouncedRender();
+    });
+  });
+
+  exportBtn.addEventListener('click', () => {
+    if(!currentSvgString) return;
+    const blob = new Blob([currentSvgString], {type: 'image/svg+xml'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'x-grid.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+})();
+</script>
+
+</body>
+</html>
