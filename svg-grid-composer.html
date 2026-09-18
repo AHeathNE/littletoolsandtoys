@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Grid Composer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --ink:#1c1b1a;
@@ -26,6 +27,14 @@
     display:flex;
     flex-direction:column;
     height:100vh;
+    overflow:hidden;
+  }
+
+  #svgApp, #pngApp{
+    display:flex;
+    flex-direction:column;
+    flex:1;
+    min-height:0;
     overflow:hidden;
   }
 
@@ -99,6 +108,7 @@
   button.primary:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
   button.ghost{border-color:var(--line);color:var(--muted);}
   button.ghost:hover{background:var(--paper);color:var(--ink);}
+  button.toggled{background:var(--accent);color:#fff;border-color:var(--accent);}
 
   .export-group{display:flex;gap:6px;}
 
@@ -144,7 +154,7 @@
     cursor:pointer;
     padding:10px;
   }
-  .tool svg{width:100%;height:100%;display:block;transition:transform .15s ease;}
+  .tool svg, .tool img{width:100%;height:100%;display:block;transition:transform .15s ease;object-fit:contain;}
   .tool.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,90,54,.18);}
   .tool .keybadge{
     position:absolute;
@@ -228,40 +238,208 @@
     background-position:0 0, 0 10px, 10px -10px, -10px 0px;
   }
 
-  #grid{
+  #grid, #pGrid{
     display:grid;
-    background:var(--gridbg, #ffffff);
+    position:relative;
     box-shadow:0 4px 24px rgba(0,0,0,.12);
+    user-select:none;
+    border-left:2px solid rgba(0,0,0,.16);
+    border-top:2px solid rgba(0,0,0,.16);
+  }
+  .free-layer{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+  }
+  .free-layer.active{
+    pointer-events:auto;
+    cursor:crosshair;
+  }
+  .free-stamp{
+    position:absolute;
+    pointer-events:auto;
+    transform:translate(-50%, -50%);
+  }
+  .free-stamp svg, .free-stamp img{
+    width:100%;
+    height:100%;
+    display:block;
+    pointer-events:none;
+    object-fit:contain;
   }
   .cell{
-    border:1px solid rgba(0,0,0,.08);
+    position:relative;
+    border-right:2px solid rgba(0,0,0,.16);
+    border-bottom:2px solid rgba(0,0,0,.16);
     display:flex;
     align-items:center;
     justify-content:center;
     cursor:pointer;
-    padding:6%;
+    padding:var(--cellpad, 0%);
     user-select:none;
   }
-  .cell svg{width:100%;height:100%;pointer-events:none;}
+  /* filled cells render their content slightly oversized so it bleeds over
+     and covers the cell's own border, rather than needing to track which
+     exact edges to hide based on neighbor state — an opaque shape simply
+     paints over the line underneath it. Doesn't help shapes with
+     transparent/white edges, but solves it cleanly for solid fills. */
+  /* top+left+width+height (not the inset shorthand's right/bottom) — an
+     absolutely-positioned replaced element (img) with only inset values
+     and no explicit width/height can fall back to its own intrinsic size
+     instead of the inset-implied box, which is exactly what was making
+     PNGs render at their native 100x100px regardless of actual cell size.
+     Explicit width/height forces correct scaling regardless of source
+     image dimensions. The -3px/+6px bleeds the shape past the cell's own
+     edge to cover the border under it (needed in practice — see history). */
+  .cell svg, .cell img{
+    position:absolute;
+    top:calc(var(--cellpad, 0%) - 1px);
+    left:calc(var(--cellpad, 0%) - 1px);
+    width:calc(100% - 2*var(--cellpad, 0%) + 2px);
+    height:calc(100% - 2*var(--cellpad, 0%) + 2px);
+    pointer-events:none;
+    object-fit:contain;
+  }
   .cell:hover{background:rgba(255,90,54,.08);}
 
   #file-input{display:none;}
+  #folder-input{display:none;}
+
+  .toolbox-actions{display:flex;gap:6px;margin-bottom:10px;}
+  .toolbox-actions button{flex:1;font-size:9px;padding:6px 4px;}
+
+  .field label, label.field{cursor:pointer;}
+  .field input[type=checkbox]{cursor:pointer;}
+
+  /* --- shape editor / pixel tool modals --- */
+  #shapeModal, #pixelModal{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(28,27,26,.5);
+    z-index:50;
+    align-items:center;
+    justify-content:center;
+  }
+  #shapeModal.open, #pixelModal.open{display:flex;}
+  .shape-panel{
+    background:var(--panel);
+    border-radius:10px;
+    width:min(720px, 92vw);
+    max-height:90vh;
+    overflow-y:auto;
+    padding:20px 24px 24px;
+    box-shadow:0 12px 40px rgba(0,0,0,.25);
+  }
+  .shape-panel-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .shape-panel-head h2{margin:0;font-size:13px;}
+  .shape-controls{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .shape-canvas-wrap{
+    display:flex;
+    justify-content:center;
+    padding:10px;
+    background:
+      linear-gradient(45deg, #eeece5 25%, transparent 25%),
+      linear-gradient(-45deg, #eeece5 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #eeece5 75%),
+      linear-gradient(-45deg, transparent 75%, #eeece5 75%);
+    background-size:20px 20px;
+    background-position:0 0, 0 10px, 10px -10px, -10px 0px;
+    border-radius:8px;
+    margin-bottom:14px;
+  }
+  #shapeSvg{user-select:none;}
+  #shapeSvg .cellhit{fill:transparent;stroke:none;cursor:pointer;}
+  #shapeSvg .cellhit:hover{fill:rgba(255,90,54,.15);}
+  #shapeSvg .cellhit.selected{fill:rgba(255,90,54,.35);}
+  .shape-footer{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+  }
+  .shape-footer-left{display:flex;gap:8px;}
+  .shape-body{display:flex;gap:14px;align-items:flex-start;}
+  .shape-toolbox{grid-template-columns:1fr;width:76px;flex-shrink:0;margin-bottom:0;}
+
+  .style-toggle{display:flex;gap:6px;}
+  .style-toggle button{padding:6px 10px;}
+
+  .mode-switch{
+    display:flex;
+    gap:0;
+    background:var(--ink);
+    padding:0;
+  }
+  .mode-btn{
+    flex:1;
+    border:none;
+    border-radius:0;
+    background:var(--ink);
+    color:rgba(255,255,255,.55);
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    padding:9px 12px;
+    cursor:pointer;
+  }
+  .mode-btn:hover{color:#fff;}
+  .mode-btn.active{background:var(--accent);color:#fff;}
+
+  #pixelCanvas{
+    background:
+      linear-gradient(45deg, #eeece5 25%, transparent 25%),
+      linear-gradient(-45deg, #eeece5 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #eeece5 75%),
+      linear-gradient(-45deg, transparent 75%, #eeece5 75%);
+    background-size:16px 16px;
+    background-position:0 0, 0 8px, 8px -8px, -8px 0px;
+    cursor:crosshair;
+    image-rendering:pixelated;
+    border-radius:6px;
+    box-shadow:0 4px 24px rgba(0,0,0,.12);
+    width:100%;
+    max-width:340px;
+    height:auto;
+    aspect-ratio:1;
+    display:block;
+  }
+
 </style>
 </head>
 <body>
 
+<div class="mode-switch">
+  <button class="mode-btn active" id="modeSvgBtn">SVG Mode</button>
+  <button class="mode-btn" id="modePngBtn">PNG Mode</button>
+</div>
+
+<div id="svgApp">
 <header>
   <h1>Grid<span>/</span>Composer</h1>
   <div class="controls-row">
     <div class="field">Rows <input type="number" id="rows" value="6" min="1" max="40"></div>
     <div class="field">Cols <input type="number" id="cols" value="6" min="1" max="40"></div>
-    <div class="field">Ratio
-      <input type="number" id="ratioW" value="1" min="1" max="20" style="width:36px">
-      <span class="x">:</span>
-      <input type="number" id="ratioH" value="1" min="1" max="20" style="width:36px">
-    </div>
-    <div class="field">Gap <input type="number" id="gap" value="2" min="0" max="30"></div>
+    <div class="field">Gap <input type="number" id="gap" value="0" min="0" max="30"></div>
+    <div class="field">Pad <input type="number" id="cellPad" value="0" min="0" max="30"></div>
     <div class="field">Bg <input type="color" id="bgColor" value="#ffffff"></div>
+    <label class="field"><input type="checkbox" id="bgTransparent" checked> Transparent</label>
+    <label class="field"><input type="checkbox" id="fgOverrideChk"> Recolor shapes <input type="color" id="fgColor" value="#1c1b1a"></label>
+    <label class="field"><input type="checkbox" id="freeModeChk"> Free placement</label>
+    <div class="field" id="freeSizeField" style="display:none;">Stamp size <input type="number" id="freeSize" value="100" min="10" max="400" style="width:52px">%</div>
+    <button class="ghost" id="undoBtn" title="Ctrl/Cmd+Z">Undo</button>
     <button class="ghost" id="clearBtn">Clear grid</button>
   </div>
   <div class="export-group">
@@ -274,15 +452,22 @@
 <main>
   <aside>
     <h2>Toolbox</h2>
+    <div class="toolbox-actions">
+      <button class="ghost" id="clearToolboxBtn">Clear toolbox</button>
+      <button class="ghost" id="exportToolboxBtn">Export toolbox</button>
+    </div>
     <div class="toolbox" id="toolbox"></div>
 
     <div class="add-tool">
       <h2 style="margin-top:0">Add SVG</h2>
       <button id="uploadBtn">Upload .svg file</button>
+      <button id="importFolderBtn">Import folder of SVGs</button>
+      <button id="drawBtn">Draw a shape</button>
       <input type="file" id="file-input" accept=".svg,image/svg+xml">
+      <input type="file" id="folder-input" webkitdirectory directory multiple>
       <textarea id="pasteArea" placeholder="...or paste raw SVG markup here"></textarea>
       <button id="pasteAddBtn">Add pasted SVG</button>
-      <div class="hint">Click a shape to select it as your brush, then click cells to stamp it. Click a filled cell with the same shape to erase it. Hover a custom shape for a delete button.</div>
+      <div class="hint">Click a shape, or press its numbered key (1–9, 0), to select it as your brush. Press that same key again — or use <b>,</b> / <b>.</b> — to rotate it 90° counter-clockwise / clockwise. Click or click-and-drag across cells to stamp, starting on a filled cell erases instead. Hover a custom shape for a delete button.</div>
     </div>
   </aside>
 
@@ -291,6 +476,107 @@
   </div>
 </main>
 
+<div id="shapeModal">
+  <div class="shape-panel">
+    <div class="shape-panel-head">
+      <h2>Shape editor</h2>
+      <button class="ghost" id="shapeCloseBtn">Close</button>
+    </div>
+    <div class="shape-controls">
+      <div class="field">Grid size <input type="number" id="shapeSize" value="4" min="1" max="20"></div>
+    </div>
+    <div class="shape-body">
+      <div class="toolbox shape-toolbox" id="shapeToolbox"></div>
+      <div class="shape-canvas-wrap" style="flex:1;">
+        <svg id="shapeSvg"></svg>
+      </div>
+    </div>
+    <div class="shape-footer">
+      <button class="ghost" id="shapeUndoBtn" title="Ctrl/Cmd+Z">Undo</button>
+      <button class="ghost" id="shapeClearBtn">Clear all</button>
+      <button class="primary" id="shapeAddBtn">Add to toolbox</button>
+    </div>
+    <div class="hint" id="shapeHint" style="margin-top:10px;">Click a tile, or press its numbered key (1–3), to select it as your brush. Press that same key again — or use <b>,</b> / <b>.</b> — to rotate it 90°. Click or click-and-drag across cells to stamp, starting on an already-stamped cell erases instead.</div>
+  </div>
+</div>
+</div><!-- /svgApp -->
+
+<div id="pngApp" style="display:none;">
+<header>
+  <h1>Grid<span>/</span>Composer <span style="font-size:11px;color:var(--muted);">— PNG</span></h1>
+  <div class="controls-row">
+    <div class="field">Rows <input type="number" id="pRows" value="6" min="1" max="40"></div>
+    <div class="field">Cols <input type="number" id="pCols" value="6" min="1" max="40"></div>
+    <div class="field">Gap <input type="number" id="pGap" value="0" min="0" max="30"></div>
+    <div class="field">Pad <input type="number" id="pCellPad" value="0" min="0" max="30"></div>
+    <div class="field">Bg <input type="color" id="pBgColor" value="#ffffff"></div>
+    <label class="field"><input type="checkbox" id="pBgTransparent" checked> Transparent</label>
+    <label class="field"><input type="checkbox" id="pFgOverrideChk"> Recolor shapes <input type="color" id="pFgColor" value="#1c1b1a"></label>
+    <label class="field"><input type="checkbox" id="pFreeModeChk"> Free placement</label>
+    <div class="field" id="pFreeSizeField" style="display:none;">Stamp size <input type="number" id="pFreeSize" value="100" min="10" max="400" style="width:52px">%</div>
+    <button class="ghost" id="pUndoBtn" title="Ctrl/Cmd+Z">Undo</button>
+    <button class="ghost" id="pClearBtn">Clear grid</button>
+  </div>
+  <div class="export-group">
+    <button id="pExportSvg">Export SVG</button>
+    <button id="pExportPng">Export PNG</button>
+    <button class="primary" id="pExportPdf">Export PDF</button>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <h2>Toolbox</h2>
+    <div class="toolbox-actions">
+      <button class="ghost" id="pClearToolboxBtn">Clear toolbox</button>
+      <button class="ghost" id="pExportToolboxBtn">Export toolbox</button>
+    </div>
+    <div class="toolbox" id="pToolbox"></div>
+
+    <div class="add-tool">
+      <h2 style="margin-top:0">Add PNG</h2>
+      <button id="pUploadBtn">Upload .png file</button>
+      <button id="pImportFolderBtn">Import folder of PNGs</button>
+      <button id="pDrawBtn">Draw a shape</button>
+      <input type="file" id="p-file-input" accept=".png,image/png">
+      <input type="file" id="p-folder-input" webkitdirectory directory multiple>
+      <div class="hint">Click a shape, or press its numbered key (1–9, 0), to select it as your brush. Press that same key again — or use <b>,</b> / <b>.</b> — to rotate it 90° counter-clockwise / clockwise. Click or click-and-drag across cells to stamp, starting on a filled cell erases instead. Hover a custom shape for a delete button.</div>
+    </div>
+  </aside>
+
+  <div class="canvas-wrap">
+    <div id="pGrid"></div>
+  </div>
+</main>
+
+<div id="pixelModal">
+  <div class="shape-panel">
+    <div class="shape-panel-head">
+      <h2>Pixel drawing tool</h2>
+      <button class="ghost" id="pixelCloseBtn">Close</button>
+    </div>
+    <div class="shape-controls">
+      <div class="field">Guide grid <input type="number" id="pixelGuide" value="8" min="1" max="32" style="width:44px"></div>
+      <div class="field">Brush size <input type="number" id="pixelBrushSize" value="3" min="1" max="20" style="width:44px"></div>
+      <div class="style-toggle">
+        <button class="ghost toggled" id="pixelBrushSquare">Square</button>
+        <button class="ghost" id="pixelBrushRound">Round</button>
+      </div>
+      <button class="ghost" id="pixelEraserBtn">Eraser</button>
+    </div>
+    <div class="shape-canvas-wrap">
+      <canvas id="pixelCanvas" width="512" height="512"></canvas>
+    </div>
+    <div class="shape-footer">
+      <button class="ghost" id="pixelUndoBtn" title="Ctrl/Cmd+Z">Undo</button>
+      <button class="ghost" id="pixelClearBtn">Clear canvas</button>
+      <button class="primary" id="pixelAddBtn">Add to toolbox</button>
+    </div>
+    <div class="hint" style="margin-top:10px;">Draw with the mouse — click-and-drag to paint. The grid is just a visual guide and doesn't constrain the brush. Toggle Eraser to remove pixels instead.</div>
+  </div>
+</div>
+</div><!-- /pngApp -->
+
 <script>
 (function(){
   const state = {
@@ -298,8 +584,22 @@
     cols: 6,
     ratioW: 1,
     ratioH: 1,
-    gap: 2,
+    gap: 0,
+    cellPadding: 0,
     bgColor: "#ffffff",
+    bgTransparent: true,
+    fgOverride: false,
+    fgColor: "#1c1b1a",
+    isDragging: false,
+    dragMode: null, // 'place' | 'erase' — decided by the cell a drag starts on
+    lastDragCell: null, // "r,c" of the last cell painted this drag, to avoid redundant re-renders
+    freeMode: false,        // true = clicks place free-form stamps instead of snapping to a cell
+    freeStamps: [],         // {x, y, size, tool, rotation} — x/y/size all in "cell units" (1 unit = 1 cell), independent of live pixel size
+    freeStampSize: 1,       // current stamp size in cell units, set from the "Stamp size %" field
+    isFreeDragging: false,
+    freeDragLastPos: null,  // {x,y} of the last placed stamp this drag, so a drag lays down a spaced-out trail
+    currentCellPx: 0,       // live px-per-unit, refreshed every render, used to convert clicks to unit coords
+    undoStack: [],
     selectedTool: null,
     tools: [
       { id:"full", name:"Full", custom:false, color:"#1c1b1a",
@@ -311,7 +611,17 @@
       { id:"circle", name:"Circle", custom:false, color:"#1c1b1a",
         markup:'<circle cx="50" cy="50" r="42" fill="currentColor"/>' },
       { id:"arrow", name:"Arrow", custom:false, color:"#1c1b1a",
-        markup:'<path d="M12 35 H55 V15 L88 50 L55 85 V65 H12 Z" fill="currentColor"/>' }
+        markup:'<path d="M12 35 H55 V15 L88 50 L55 85 V65 H12 Z" fill="currentColor"/>' },
+      { id:"edge-box", name:"Box (edge)", custom:false, color:"#1c1b1a",
+        markup:'<rect x="0" y="0" width="100" height="100" fill="currentColor"/>' },
+      { id:"edge-plus", name:"Plus (edge)", custom:false, color:"#1c1b1a",
+        markup:'<rect x="35" y="0" width="30" height="100" fill="currentColor"/><rect x="0" y="35" width="100" height="30" fill="currentColor"/>' },
+      { id:"edge-equals", name:"Equals (edge)", custom:false, color:"#1c1b1a",
+        markup:'<rect x="0" y="14" width="100" height="24" fill="currentColor"/><rect x="0" y="62" width="100" height="24" fill="currentColor"/>' },
+      { id:"quarter-circle", name:"Quarter Circle", custom:false, color:"#1c1b1a",
+        markup:'<path d="M 0,0 L 100,0 A 100,100 0 0 1 0,100 Z" fill="currentColor"/>' },
+      { id:"quarter-circle-neg", name:"Quarter Circle (neg)", custom:false, color:"#1c1b1a",
+        markup:'<path d="M 100,0 L 100,100 L 0,100 A 100,100 0 0 0 100,0 Z" fill="currentColor"/>' }
     ],
     grid: [] // rows x cols of { tool, rotation } or null
   };
@@ -334,6 +644,53 @@
   state.grid = makeGrid(state.rows, state.cols, null);
 
   function toolById(id){ return state.tools.find(t => t.id === id); }
+
+  // --- undo: snapshot-based, covers the toolbox and the grid/free-stamp
+  // content together so deleting a tool, clearing the toolbox, painting,
+  // erasing, and clearing the grid are all one consistent undo history ---
+  const MAX_UNDO = 50;
+  function pushUndo(){
+    state.undoStack.push(JSON.stringify({
+      tools: state.tools, grid: state.grid, freeStamps: state.freeStamps, selectedTool: state.selectedTool
+    }));
+    if(state.undoStack.length > MAX_UNDO) state.undoStack.shift();
+  }
+  function undo(){
+    if(state.undoStack.length === 0) return;
+    const snap = JSON.parse(state.undoStack.pop());
+    state.tools = snap.tools;
+    state.grid = snap.grid;
+    state.freeStamps = snap.freeStamps;
+    state.selectedTool = snap.selectedTool;
+    renderToolbox();
+    renderGrid();
+  }
+  window.__undo = window.__undo || {};
+  window.__undo.svg = undo;
+  document.getElementById('undoBtn').addEventListener('click', undo);
+
+  // Applies the current drag's paint/erase action to one cell — shared by
+  // a plain click (mousedown then mouseup with no movement, painting just
+  // that one cell) and a click-and-drag across several cells.
+  function paintCell(r, c){
+    if(!state.selectedTool || !state.dragMode) return;
+    const current = state.grid[r][c];
+    let next;
+    if(state.dragMode === 'place'){
+      const tool = toolById(state.selectedTool);
+      next = { tool: state.selectedTool, rotation: tool ? tool.rotation : 0 };
+    }else{
+      next = null;
+    }
+    // skip no-op writes (e.g. re-crossing an already-painted cell mid-drag)
+    // so they don't spam the undo stack with identical snapshots
+    const unchanged = (!current && !next) ||
+      (current && next && current.tool === next.tool && current.rotation === next.rotation);
+    if(unchanged) return;
+    pushUndo();
+    state.grid[r][c] = next;
+    renderGrid();
+  }
 
   function renderToolbox(){
     const box = document.getElementById('toolbox');
@@ -375,6 +732,7 @@
         del.title = 'Remove shape';
         del.addEventListener('click', (e) => {
           e.stopPropagation();
+          pushUndo();
           state.tools = state.tools.filter(t => t.id !== tool.id);
           if(state.selectedTool === tool.id) state.selectedTool = null;
           state.grid = state.grid.map(row => row.map(c => (c && c.tool === tool.id) ? null : c));
@@ -390,10 +748,10 @@
 
   function renderGrid(){
     const gridEl = document.getElementById('grid');
-    const wrap = document.querySelector('.canvas-wrap');
-    gridEl.style.setProperty('--gridbg', state.bgColor);
-    gridEl.style.background = state.bgColor;
+    const wrap = gridEl.closest('.canvas-wrap');
+    gridEl.style.backgroundColor = state.bgTransparent ? 'transparent' : state.bgColor;
     gridEl.style.gap = state.gap + 'px';
+    gridEl.style.setProperty('--cellpad', state.cellPadding + '%');
 
     const availW = wrap.clientWidth - 60;
     const availH = wrap.clientHeight - 60;
@@ -404,7 +762,17 @@
       cellH = (availH - (state.rows - 1) * state.gap) / state.rows;
       cellW = cellH * cellRatio;
     }
+    // whole-pixel cell sizes only — fractional track widths let CSS Grid
+    // round adjacent tracks' boundaries independently, leaving a hairline
+    // gap between cells that varies with grid size (exactly what changed
+    // when rows/cols were adjusted) regardless of border color
+    cellW = Math.floor(cellW);
+    cellH = Math.floor(cellH);
+    state.currentCellPx = cellW; // used to convert free-placement clicks to unit coords
 
+    // grid lines are always-visible cell borders — filled cells cover
+    // them naturally via the oversized-content CSS rule above, so there's
+    // no need to track neighbor fill state here at all.
     gridEl.style.gridTemplateColumns = `repeat(${state.cols}, ${cellW}px)`;
     gridEl.style.gridTemplateRows = `repeat(${state.rows}, ${cellH}px)`;
     gridEl.innerHTML = '';
@@ -413,28 +781,120 @@
       for(let c=0;c<state.cols;c++){
         const cellEl = document.createElement('div');
         cellEl.className = 'cell';
+        cellEl.dataset.r = r;
+        cellEl.dataset.c = c;
         const cellData = state.grid[r][c];
         if(cellData){
+          // filled cells paint above their neighbors regardless of DOM
+          // order, so their oversized/overflowing content actually covers
+          // the shared border instead of a later (right/bottom) empty
+          // sibling's own box stacking on top of that overflow
+          cellEl.style.zIndex = '1';
           const tool = toolById(cellData.tool);
           if(tool){
-            cellEl.innerHTML = `<svg viewBox="${tool.viewBox || '0 0 100 100'}" style="color:${tool.color};transform:rotate(${cellData.rotation}deg)">${tool.markup}</svg>`;
+            const color = state.fgOverride ? state.fgColor : tool.color;
+            cellEl.innerHTML = `<svg viewBox="${tool.viewBox || '0 0 100 100'}" style="color:${color};transform:rotate(${cellData.rotation}deg)">${tool.markup}</svg>`;
           }
         }
-        cellEl.addEventListener('click', () => {
-          if(!state.selectedTool) return;
+        cellEl.addEventListener('mousedown', (e) => {
+          if(!state.selectedTool || state.freeMode) return;
+          e.preventDefault();
           const current = state.grid[r][c];
-          if(current && current.tool === state.selectedTool){
-            state.grid[r][c] = null;
-          }else{
-            const tool = toolById(state.selectedTool);
-            state.grid[r][c] = { tool: state.selectedTool, rotation: tool ? tool.rotation : 0 };
-          }
-          renderGrid();
+          state.dragMode = (current && current.tool === state.selectedTool) ? 'erase' : 'place';
+          state.isDragging = true;
+          state.lastDragCell = r + ',' + c;
+          paintCell(r, c);
         });
         gridEl.appendChild(cellEl);
       }
     }
+
+    renderFreeLayer(gridEl, cellW);
   }
+
+  // Free-form placement: an absolutely-positioned overlay spanning the
+  // whole grid, sitting above the cells. Stamps are stored in "cell
+  // units" (1 unit = 1 cell's width/height) so they stay correctly scaled
+  // and positioned no matter how the grid is later resized, and so they
+  // convert to the export coordinate system the same way grid cells do.
+  function renderFreeLayer(gridEl, cellPx){
+    const layer = document.createElement('div');
+    layer.className = 'free-layer' + (state.freeMode ? ' active' : '');
+
+    state.freeStamps.forEach((stamp, idx) => {
+      const tool = toolById(stamp.tool);
+      if(!tool) return;
+      const el = document.createElement('div');
+      el.className = 'free-stamp';
+      el.dataset.idx = idx;
+      el.style.left = (stamp.x * cellPx) + 'px';
+      el.style.top = (stamp.y * cellPx) + 'px';
+      el.style.width = (stamp.size * cellPx) + 'px';
+      el.style.height = (stamp.size * cellPx) + 'px';
+      const color = state.fgOverride ? state.fgColor : tool.color;
+      el.innerHTML = `<svg viewBox="${tool.viewBox || '0 0 100 100'}" style="color:${color};transform:rotate(${stamp.rotation}deg)">${tool.markup}</svg>`;
+      layer.appendChild(el);
+    });
+
+    layer.addEventListener('mousedown', (e) => {
+      if(!state.freeMode || !state.selectedTool) return;
+      e.preventDefault();
+      const stampEl = e.target.closest('.free-stamp');
+      if(stampEl){
+        const idx = parseInt(stampEl.dataset.idx, 10);
+        const stamp = state.freeStamps[idx];
+        if(stamp && stamp.tool === state.selectedTool){
+          pushUndo();
+          state.freeStamps.splice(idx, 1);
+          renderGrid();
+          return;
+        }
+      }
+      const rect = layer.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / cellPx;
+      const y = (e.clientY - rect.top) / cellPx;
+      state.isFreeDragging = true;
+      state.freeDragLastPos = { x, y };
+      placeFreeStamp(x, y);
+    });
+    layer.addEventListener('mousemove', (e) => {
+      if(!state.freeMode || !state.isFreeDragging || !state.selectedTool) return;
+      const rect = layer.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / cellPx;
+      const y = (e.clientY - rect.top) / cellPx;
+      const last = state.freeDragLastPos;
+      const dist = last ? Math.hypot(x - last.x, y - last.y) : Infinity;
+      if(dist >= state.freeStampSize * 0.6){
+        state.freeDragLastPos = { x, y };
+        placeFreeStamp(x, y);
+      }
+    });
+
+    gridEl.appendChild(layer);
+  }
+
+  function placeFreeStamp(x, y){
+    const tool = toolById(state.selectedTool);
+    if(!tool) return;
+    pushUndo();
+    state.freeStamps.push({ x, y, size: state.freeStampSize, tool: state.selectedTool, rotation: tool.rotation });
+    renderGrid();
+  }
+
+  // Point-based hit-testing during a drag, rather than relying solely on
+  // mouseenter — mouseenter only fires for cells the cursor actually
+  // enters, so a fast drag can jump clean over a narrow cell and leave it
+  // unpainted. elementFromPoint catches whatever's actually under the
+  // cursor on every mousemove sample instead.
+  document.getElementById('grid').addEventListener('mousemove', (e) => {
+    if(!state.isDragging) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if(!el || !el.classList.contains('cell')) return;
+    const key = el.dataset.r + ',' + el.dataset.c;
+    if(key === state.lastDragCell) return;
+    state.lastDragCell = key;
+    paintCell(parseInt(el.dataset.r, 10), parseInt(el.dataset.c, 10));
+  });
 
   // --- controls ---
   document.getElementById('rows').addEventListener('input', (e) => {
@@ -447,33 +907,76 @@
     state.grid = makeGrid(state.rows, state.cols, state.grid);
     renderGrid();
   });
-  document.getElementById('ratioW').addEventListener('input', (e) => {
-    state.ratioW = Math.max(1, parseFloat(e.target.value) || 1);
-    renderGrid();
-  });
-  document.getElementById('ratioH').addEventListener('input', (e) => {
-    state.ratioH = Math.max(1, parseFloat(e.target.value) || 1);
-    renderGrid();
-  });
   document.getElementById('gap').addEventListener('input', (e) => {
     state.gap = Math.max(0, parseInt(e.target.value) || 0);
     renderGrid();
   });
-  document.getElementById('bgColor').addEventListener('input', (e) => {
-    state.bgColor = e.target.value;
+  document.getElementById('cellPad').addEventListener('input', (e) => {
+    state.cellPadding = Math.max(0, parseFloat(e.target.value) || 0);
     renderGrid();
   });
+  document.getElementById('bgColor').addEventListener('input', (e) => {
+    state.bgColor = e.target.value;
+    state.bgTransparent = false;
+    document.getElementById('bgTransparent').checked = false;
+    renderGrid();
+  });
+  document.getElementById('bgTransparent').addEventListener('change', (e) => {
+    state.bgTransparent = e.target.checked;
+    renderGrid();
+  });
+  document.getElementById('fgOverrideChk').addEventListener('change', (e) => {
+    state.fgOverride = e.target.checked;
+    renderGrid();
+  });
+  document.getElementById('fgColor').addEventListener('input', (e) => {
+    state.fgColor = e.target.value;
+    renderGrid();
+  });
+  document.getElementById('freeModeChk').addEventListener('change', (e) => {
+    state.freeMode = e.target.checked;
+    document.getElementById('freeSizeField').style.display = state.freeMode ? 'flex' : 'none';
+    renderGrid();
+  });
+  document.getElementById('freeSize').addEventListener('input', (e) => {
+    const parsed = parseFloat(e.target.value);
+    const pct = Math.max(10, Number.isNaN(parsed) ? 100 : parsed);
+    state.freeStampSize = pct / 100;
+  });
   document.getElementById('clearBtn').addEventListener('click', () => {
+    pushUndo();
     state.grid = makeGrid(state.rows, state.cols, null);
+    state.freeStamps = [];
     renderGrid();
   });
 
   window.addEventListener('resize', renderGrid);
+  window.addEventListener('mouseup', () => {
+    state.isDragging = false; state.dragMode = null; state.lastDragCell = null;
+    state.isFreeDragging = false; state.freeDragLastPos = null;
+    shapeEditor.isDragging = false; shapeEditor.dragMode = null; shapeEditor.lastDragCell = null;
+  });
 
   // --- number-key binding: 1-9 then 0 map to toolbox slots ---
   window.addEventListener('keydown', (e) => {
+    if(window.appMode && window.appMode !== 'svg') return;
+    // the shape editor drawer has its own 1-3 brush-selection listener
+    // (see below) — don't let digit keys leak through to the main toolbox
+    // while it's open
+    if(document.getElementById('shapeModal').classList.contains('open')) return;
     const active = document.activeElement;
     if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+
+    if(e.key === ',' || e.key === '.'){
+      const tool = toolById(state.selectedTool);
+      if(!tool) return;
+      pushUndo();
+      const delta = e.key === ',' ? -90 : 90;
+      tool.rotation = ((tool.rotation + delta) % 360 + 360) % 360;
+      renderToolbox();
+      return;
+    }
+
     if(!/^[0-9]$/.test(e.key)) return;
 
     const index = e.key === '0' ? 9 : parseInt(e.key, 10) - 1;
@@ -481,6 +984,7 @@
     if(!tool) return;
 
     if(state.selectedTool === tool.id){
+      pushUndo();
       tool.rotation = (tool.rotation + 90) % 360;
     }else{
       state.selectedTool = tool.id;
@@ -489,7 +993,7 @@
   });
 
   // --- adding custom svgs ---
-  function addSvgFromString(str){
+  function addSvgFromString(str, name){
     try{
       const parser = new DOMParser();
       const doc = parser.parseFromString(str, 'image/svg+xml');
@@ -498,10 +1002,11 @@
       const viewBox = svgEl.getAttribute('viewBox') || '0 0 100 100';
       const markup = svgEl.innerHTML;
       const id = 'custom-' + Date.now() + '-' + Math.floor(Math.random()*1000);
-      state.tools.push({ id, name:'Custom', custom:true, color:'#1c1b1a', markup, viewBox });
+      pushUndo();
+      state.tools.push({ id, name: name || 'Custom', custom:true, color:'#1c1b1a', markup, viewBox, rotation:0 });
       renderToolbox();
     }catch(err){
-      alert('Could not read that as valid SVG markup.');
+      alert(`Could not read "${name || 'that file'}" as valid SVG markup.`);
     }
   }
 
@@ -512,7 +1017,8 @@
     const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => addSvgFromString(ev.target.result);
+    const name = file.name.replace(/\.svg$/i, '');
+    reader.onload = (ev) => addSvgFromString(ev.target.result, name);
     reader.readAsText(file);
     e.target.value = '';
   });
@@ -521,6 +1027,383 @@
     if(!val) return;
     addSvgFromString(val);
     document.getElementById('pasteArea').value = '';
+  });
+
+  document.getElementById('importFolderBtn').addEventListener('click', () => {
+    document.getElementById('folder-input').click();
+  });
+  document.getElementById('folder-input').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files).filter(f =>
+      f.name.toLowerCase().endsWith('.svg') || f.type === 'image/svg+xml'
+    );
+    if(files.length === 0){
+      alert('No .svg files found in that folder.');
+    }else{
+      files.forEach(file => {
+        const reader = new FileReader();
+        const name = file.name.replace(/\.svg$/i, '');
+        reader.onload = (ev) => addSvgFromString(ev.target.result, name);
+        reader.readAsText(file);
+      });
+    }
+    e.target.value = '';
+  });
+
+  document.getElementById('clearToolboxBtn').addEventListener('click', () => {
+    if(state.tools.length === 0) return;
+    if(!confirm('Remove every shape from the toolbox? This also clears any stamped cells using them.')) return;
+    pushUndo();
+    state.tools = [];
+    state.selectedTool = null;
+    state.grid = makeGrid(state.rows, state.cols, null);
+    renderToolbox();
+    renderGrid();
+  });
+
+  document.getElementById('exportToolboxBtn').addEventListener('click', () => {
+    if(state.tools.length === 0){
+      alert('The toolbox is empty.');
+      return;
+    }
+    const zip = new JSZip();
+    const usedNames = new Set();
+    state.tools.forEach((tool) => {
+      // exported SVGs need explicit pixel width/height — without them, a
+      // file's intrinsic size defaults to its viewBox numbers taken as
+      // literal pixels (e.g. viewBox="0 0 4 4" renders as a 4px square in
+      // most file viewers), which is why these were showing up tiny
+      const vb = (tool.viewBox || '0 0 100 100').split(/\s+/).map(Number);
+      const vbW = vb[2] || 100, vbH = vb[3] || 100;
+      const target = 200;
+      const scale = target / Math.max(vbW, vbH);
+      const w = Math.round(vbW * scale), h = Math.round(vbH * scale);
+      const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${tool.viewBox || '0 0 100 100'}" width="${w}" height="${h}" style="color:${tool.color}">${tool.markup}</svg>`;
+      let base = (tool.name || 'shape').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'shape';
+      let filename = `${base}.svg`, n = 2;
+      while(usedNames.has(filename)){ filename = `${base}-${n++}.svg`; }
+      usedNames.add(filename);
+      zip.file(filename, svgStr);
+    });
+    zip.generateAsync({ type: 'blob' }).then(blob => download('toolbox-svgs.zip', blob));
+  });
+
+  // --- shape editor: a mini version of the main composer. Pick a brush from
+  // a 3-tile toolbox (the same "Box (edge)" / "Quarter Circle" / "Quarter
+  // Circle (neg)" glyphs as main toolbox slots 6, 9 and 0), then click or
+  // click-and-drag across the grid to stamp cells — same interaction model
+  // as the main grid (paintCell/dragMode/erase-on-same-tool), just building
+  // a multi-cell shape instead of stamping a composition. "Add to toolbox"
+  // merges every stamped cell into one combined <path>.
+  const shapeEditor = {
+    rows: 4,
+    cols: 4,
+    cellPx: 60,
+    pad: 24,
+    tools: [
+      { id:'full', rotation:0 },
+      { id:'quarter-circle', rotation:0 },
+      { id:'quarter-circle-neg', rotation:0 }
+    ],
+    selectedTool: null,
+    cells: new Map(),   // "gx,gy" -> {tool:'full'|'quarter-circle'|'quarter-circle-neg', rotation:0|90|180|270}
+    isDragging: false,
+    dragMode: null,      // 'place' | 'erase' — decided by the cell a drag starts on
+    lastDragCell: null,
+    undoStack: []
+  };
+
+  function cellKey(gx, gy){ return gx + ',' + gy; }
+  function shapeBrushById(id){ return shapeEditor.tools.find(t => t.id === id); }
+
+  // --- undo (shape editor drawer) ---
+  const MAX_UNDO_SHAPE = 50;
+  function pushUndoShape(){
+    shapeEditor.undoStack.push(JSON.stringify({
+      tools: shapeEditor.tools, cells: Array.from(shapeEditor.cells.entries()), selectedTool: shapeEditor.selectedTool
+    }));
+    if(shapeEditor.undoStack.length > MAX_UNDO_SHAPE) shapeEditor.undoStack.shift();
+  }
+  function undoShape(){
+    if(shapeEditor.undoStack.length === 0) return;
+    const snap = JSON.parse(shapeEditor.undoStack.pop());
+    shapeEditor.tools = snap.tools;
+    shapeEditor.cells = new Map(snap.cells);
+    shapeEditor.selectedTool = snap.selectedTool;
+    renderShapeToolbox();
+    renderShapeEditor();
+  }
+  window.__undo = window.__undo || {};
+  window.__undo.svgShape = undoShape;
+
+  function shapeSvgSize(){
+    return {
+      w: shapeEditor.cols * shapeEditor.cellPx + shapeEditor.pad * 2,
+      h: shapeEditor.rows * shapeEditor.cellPx + shapeEditor.pad * 2
+    };
+  }
+
+  function gridToPx(gx, gy){
+    return [shapeEditor.pad + gx * shapeEditor.cellPx, shapeEditor.pad + gy * shapeEditor.cellPx];
+  }
+
+  // Same three glyphs as main-toolbox tools 6/9/0 ("Box (edge)", "Quarter
+  // Circle", "Quarter Circle (neg)"), just parameterized by a cell's own
+  // origin/scale instead of hardcoded to a 0-100 viewBox — a stamped cell
+  // here is the identical shape, not a re-derived lookalike. The arc
+  // radius is written as "R R" (space, not comma) so rotatePathD's
+  // coordinate-pair regex leaves it alone and only rotates the path's
+  // actual points, same convention the old corner-tile formula used.
+  function tileD(toolId, ox, oy, scale){
+    const X = (u) => ox + u * scale;
+    const Y = (u) => oy + u * scale;
+    const R = scale;
+    if(toolId === 'quarter-circle'){
+      return `M ${X(0)},${Y(0)} L ${X(1)},${Y(0)} A ${R} ${R} 0 0 1 ${X(0)},${Y(1)} Z`;
+    }
+    if(toolId === 'quarter-circle-neg'){
+      return `M ${X(1)},${Y(0)} L ${X(1)},${Y(1)} L ${X(0)},${Y(1)} A ${R} ${R} 0 0 0 ${X(1)},${Y(0)} Z`;
+    }
+    return `M ${X(0)},${Y(0)} L ${X(1)},${Y(0)} L ${X(1)},${Y(1)} L ${X(0)},${Y(1)} Z`; // full / Box (edge)
+  }
+
+  function cellMarkup(gx, gy, cellState, unitPx){
+    const [ox, oy] = gridToPx(gx, gy);
+    const [cx, cy] = gridToPx(gx + 0.5, gy + 0.5);
+    const d = tileD(cellState.tool, ox, oy, unitPx);
+    return `<path transform="rotate(${cellState.rotation} ${cx} ${cy})" d="${d}"/>`;
+  }
+
+  // Rotates every (x,y) coordinate pair in a path's "d" string by a multiple
+  // of 90° around (cx,cy), leaving arc radii/flags untouched (a circle's
+  // radius is rotation-invariant, and a pure rotation never flips its sweep
+  // direction). Used to bake each cell's rotation into absolute coordinates
+  // so multiple cells' paths can be safely merged into one <path> — merging
+  // avoids the sub-pixel seams that separate abutting same-color shapes can
+  // show once scaled down and re-rotated as a stamp.
+  function rotatePathD(d, cx, cy, deg){
+    const steps = ((Math.round(deg / 90) % 4) + 4) % 4;
+    if(steps === 0) return d;
+    return d.replace(/(-?[\d.]+),(-?[\d.]+)/g, (m, a, b) => {
+      let x = parseFloat(a), y = parseFloat(b);
+      for(let i = 0; i < steps; i++){
+        const dx = x - cx, dy = y - cy;
+        x = cx - dy;
+        y = cy + dx;
+      }
+      return `${x},${y}`;
+    });
+  }
+
+  function renderShapeToolbox(){
+    const box = document.getElementById('shapeToolbox');
+    box.innerHTML = '';
+    shapeEditor.tools.forEach((brush, i) => {
+      const srcTool = toolById(brush.id);
+      if(!srcTool) return;
+      const el = document.createElement('div');
+      el.className = 'tool' + (shapeEditor.selectedTool === brush.id ? ' selected' : '');
+      el.innerHTML = `<svg viewBox="${srcTool.viewBox || '0 0 100 100'}" style="color:${srcTool.color};transform:rotate(${brush.rotation}deg)">${srcTool.markup}</svg>`;
+      const badge = document.createElement('div');
+      badge.className = 'keybadge';
+      badge.textContent = String(i + 1);
+      el.appendChild(badge);
+      el.addEventListener('click', () => {
+        shapeEditor.selectedTool = (shapeEditor.selectedTool === brush.id) ? null : brush.id;
+        renderShapeToolbox();
+      });
+      box.appendChild(el);
+    });
+  }
+
+  // Applies the current drag's stamp/erase action to one cell — mirrors the
+  // main grid's paintCell, including skipping a write that wouldn't change
+  // anything, so re-crossing an already-correct cell mid-drag doesn't spam
+  // the undo stack with identical snapshots.
+  function paintShapeCell(gx, gy){
+    if(!shapeEditor.selectedTool || !shapeEditor.dragMode) return;
+    const key = cellKey(gx, gy);
+    const current = shapeEditor.cells.get(key) || null;
+    let next;
+    if(shapeEditor.dragMode === 'place'){
+      const brush = shapeBrushById(shapeEditor.selectedTool);
+      next = { tool: shapeEditor.selectedTool, rotation: brush ? brush.rotation : 0 };
+    }else{
+      next = null;
+    }
+    const unchanged = (!current && !next) ||
+      (current && next && current.tool === next.tool && current.rotation === next.rotation);
+    if(unchanged) return;
+    pushUndoShape();
+    if(next) shapeEditor.cells.set(key, next);
+    else shapeEditor.cells.delete(key);
+    renderShapeEditor();
+  }
+
+  function renderShapeEditor(){
+    const svg = document.getElementById('shapeSvg');
+    const { w, h } = shapeSvgSize();
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const scale = Math.min(1, 420 / Math.max(w, h));
+    svg.style.width = (w * scale) + 'px';
+    svg.style.height = (h * scale) + 'px';
+
+    let html = '';
+    for(let c = 0; c <= shapeEditor.cols; c++){
+      const [x] = gridToPx(c, 0);
+      const [, y1] = gridToPx(c, 0), [, y2] = gridToPx(c, shapeEditor.rows);
+      html += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="var(--line)" stroke-width="1"/>`;
+    }
+    for(let r = 0; r <= shapeEditor.rows; r++){
+      const [, y] = gridToPx(0, r);
+      const [x1] = gridToPx(0, r), [x2] = gridToPx(shapeEditor.cols, r);
+      html += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+    }
+
+    let shapesHtml = '';
+    shapeEditor.cells.forEach((cellState, key) => {
+      const [gx, gy] = key.split(',').map(Number);
+      shapesHtml += cellMarkup(gx, gy, cellState, shapeEditor.cellPx);
+    });
+    html += `<g fill="var(--accent)">${shapesHtml}</g>`;
+
+    for(let gy = 0; gy < shapeEditor.rows; gy++){
+      for(let gx = 0; gx < shapeEditor.cols; gx++){
+        const [x, y] = gridToPx(gx, gy);
+        html += `<rect class="cellhit" x="${x}" y="${y}" width="${shapeEditor.cellPx}" height="${shapeEditor.cellPx}" data-gx="${gx}" data-gy="${gy}"/>`;
+      }
+    }
+    svg.innerHTML = html;
+
+    svg.querySelectorAll('.cellhit').forEach(v => {
+      const gx = parseInt(v.getAttribute('data-gx'), 10);
+      const gy = parseInt(v.getAttribute('data-gy'), 10);
+      v.addEventListener('mousedown', (e) => {
+        if(!shapeEditor.selectedTool) return;
+        e.preventDefault();
+        const current = shapeEditor.cells.get(cellKey(gx, gy));
+        shapeEditor.dragMode = (current && current.tool === shapeEditor.selectedTool) ? 'erase' : 'place';
+        shapeEditor.isDragging = true;
+        shapeEditor.lastDragCell = cellKey(gx, gy);
+        paintShapeCell(gx, gy);
+      });
+    });
+  }
+
+  // Point-based hit-testing during a drag — same reasoning as the main
+  // grid's mousemove listener (mouseenter alone can miss cells on a fast
+  // drag). Attached once here, not inside renderShapeEditor, since the SVG
+  // element itself persists across renders (only its innerHTML is rebuilt).
+  document.getElementById('shapeSvg').addEventListener('mousemove', (e) => {
+    if(!shapeEditor.isDragging) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if(!el || !el.classList.contains('cellhit')) return;
+    const gx = parseInt(el.getAttribute('data-gx'), 10);
+    const gy = parseInt(el.getAttribute('data-gy'), 10);
+    const key = cellKey(gx, gy);
+    if(key === shapeEditor.lastDragCell) return;
+    shapeEditor.lastDragCell = key;
+    paintShapeCell(gx, gy);
+  });
+
+  function openShapeEditor(){
+    document.getElementById('shapeModal').classList.add('open');
+    renderShapeToolbox();
+    renderShapeEditor();
+  }
+  function closeShapeEditor(){
+    document.getElementById('shapeModal').classList.remove('open');
+  }
+
+  document.getElementById('drawBtn').addEventListener('click', openShapeEditor);
+  document.getElementById('shapeCloseBtn').addEventListener('click', closeShapeEditor);
+
+  document.getElementById('shapeSize').addEventListener('input', (e) => {
+    const size = Math.max(1, parseInt(e.target.value) || 1);
+    shapeEditor.rows = size;
+    shapeEditor.cols = size;
+    // drop any stamped cells that fall outside the new (smaller) bounds —
+    // matches the main grid's resize behavior of keeping what still fits
+    Array.from(shapeEditor.cells.keys()).forEach(key => {
+      const [gx, gy] = key.split(',').map(Number);
+      if(gx >= size || gy >= size) shapeEditor.cells.delete(key);
+    });
+    renderShapeEditor();
+  });
+
+  // --- number-key binding for the shape editor's 3-tile brush toolbox,
+  // live only while the drawer is open — same 1-9/0 + ,/. rotation scheme
+  // as the main toolbox's listener, just scoped to 3 slots ---
+  window.addEventListener('keydown', (e) => {
+    if(!document.getElementById('shapeModal').classList.contains('open')) return;
+    const active = document.activeElement;
+    if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+
+    if(e.key === ',' || e.key === '.'){
+      const brush = shapeBrushById(shapeEditor.selectedTool);
+      if(!brush) return;
+      pushUndoShape();
+      const delta = e.key === ',' ? -90 : 90;
+      brush.rotation = ((brush.rotation + delta) % 360 + 360) % 360;
+      renderShapeToolbox();
+      return;
+    }
+
+    if(!/^[1-3]$/.test(e.key)) return;
+    const brush = shapeEditor.tools[parseInt(e.key, 10) - 1];
+    if(!brush) return;
+
+    if(shapeEditor.selectedTool === brush.id){
+      pushUndoShape();
+      brush.rotation = (brush.rotation + 90) % 360;
+    }else{
+      shapeEditor.selectedTool = brush.id;
+    }
+    renderShapeToolbox();
+  });
+
+  document.getElementById('shapeClearBtn').addEventListener('click', () => {
+    if(shapeEditor.cells.size === 0) return;
+    pushUndoShape();
+    shapeEditor.cells = new Map();
+    renderShapeEditor();
+  });
+  document.getElementById('shapeUndoBtn').addEventListener('click', undoShape);
+
+  document.getElementById('shapeAddBtn').addEventListener('click', () => {
+    if(shapeEditor.cells.size === 0){
+      alert('Stamp at least one cell first.');
+      return;
+    }
+
+    // crop the exported viewBox to the bounding box of the cells actually
+    // used, rather than the full editor grid — otherwise a small shape
+    // drawn in the corner of a large grid ends up tiny/off-center once
+    // stamped, since it'd be scaled as if it filled the whole grid
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    shapeEditor.cells.forEach((_, key) => {
+      const [gx, gy] = key.split(',').map(Number);
+      minX = Math.min(minX, gx); minY = Math.min(minY, gy);
+      maxX = Math.max(maxX, gx + 1); maxY = Math.max(maxY, gy + 1);
+    });
+
+    let combinedD = '';
+    shapeEditor.cells.forEach((cellState, key) => {
+      const [gx, gy] = key.split(',').map(Number);
+      const ox = gx - minX, oy = gy - minY;
+      const rawD = tileD(cellState.tool, ox, oy, 1);
+      combinedD += rotatePathD(rawD, ox + 0.5, oy + 0.5, cellState.rotation) + ' ';
+    });
+
+    const markup = `<path d="${combinedD.trim()}" fill="currentColor"/>`;
+    const id = 'custom-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+    state.tools.push({
+      id, name:'Drawn', custom:true, color:'#1c1b1a', rotation:0,
+      viewBox: `0 0 ${maxX - minX} ${maxY - minY}`,
+      markup
+    });
+    renderToolbox();
+    shapeEditor.cells = new Map();
+    closeShapeEditor();
   });
 
   // --- export ---
@@ -536,22 +1419,45 @@
     const fullW = state.cols * cw + (state.cols - 1) * gapUnit;
     const fullH = state.rows * ch + (state.rows - 1) * gapUnit;
 
-    let inner = `<rect x="0" y="0" width="${fullW}" height="${fullH}" fill="${state.bgColor}"/>`;
+    let inner = state.bgTransparent ? '' : `<rect x="0" y="0" width="${fullW}" height="${fullH}" fill="${state.bgColor}"/>`;
 
     for(let r=0;r<state.rows;r++){
       for(let c=0;c<state.cols;c++){
-        const toolId = state.grid[r][c];
-        if(!toolId) continue;
-        const tool = toolById(toolId);
+        const cellData = state.grid[r][c];
+        if(!cellData) continue;
+        const tool = toolById(cellData.tool);
         if(!tool) continue;
         const x = c * (cw + gapUnit);
         const y = r * (ch + gapUnit);
+        const padX = cw * (state.cellPadding / 100);
+        const padY = ch * (state.cellPadding / 100);
+        const innerW = cw - padX * 2, innerH = ch - padY * 2;
+        const cx = x + cw / 2, cy = y + ch / 2;
         const vb = (tool.viewBox || '0 0 100 100').split(/\s+/).map(Number);
         const vbW = vb[2] || 100, vbH = vb[3] || 100;
-        const sx = cw / vbW, sy = ch / vbH;
-        inner += `<g transform="translate(${x},${y}) scale(${sx},${sy})" style="color:${tool.color}">${tool.markup}</g>`;
+        const sx = innerW / vbW, sy = innerH / vbH;
+        const rot = cellData.rotation || 0;
+        const color = state.fgOverride ? state.fgColor : tool.color;
+        inner += `<g transform="rotate(${rot} ${cx} ${cy}) translate(${x + padX},${y + padY}) scale(${sx},${sy})" style="color:${color}">${tool.markup}</g>`;
       }
     }
+
+    // free-form stamps use the same unit scale as a grid cell (1 unit =
+    // cw+gap px), so they land in the same place as they appear live,
+    // positioned by their stored center point rather than a cell index
+    state.freeStamps.forEach(stamp => {
+      const tool = toolById(stamp.tool);
+      if(!tool) return;
+      const size = stamp.size * (cw + gapUnit);
+      const cx = stamp.x * (cw + gapUnit);
+      const cy = stamp.y * (cw + gapUnit);
+      const vb = (tool.viewBox || '0 0 100 100').split(/\s+/).map(Number);
+      const vbW = vb[2] || 100, vbH = vb[3] || 100;
+      const sx = size / vbW, sy = size / vbH;
+      const rot = stamp.rotation || 0;
+      const color = state.fgOverride ? state.fgColor : tool.color;
+      inner += `<g transform="rotate(${rot} ${cx} ${cy}) translate(${cx - size/2},${cy - size/2}) scale(${sx},${sy})" style="color:${color}">${tool.markup}</g>`;
+    });
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fullW} ${fullH}" width="${fullW}" height="${fullH}">${inner}</svg>`;
   }
@@ -608,5 +1514,851 @@
   renderGrid();
 })();
 </script>
+
+<script>
+(function(){
+  window.appMode = window.appMode || 'svg';
+
+  const pState = {
+    rows: 6,
+    cols: 6,
+    gap: 0,
+    cellPadding: 0,
+    bgColor: "#ffffff",
+    bgTransparent: true,
+    fgOverride: false,
+    fgColor: "#1c1b1a",
+    selectedTool: null,
+    tools: [],
+    grid: [],
+    isDragging: false,
+    dragMode: null,
+    lastDragCell: null,
+    freeMode: false,
+    freeStamps: [],
+    freeStampSize: 1,
+    isFreeDragging: false,
+    freeDragLastPos: null,
+    currentCellPx: 0,
+    undoStack: []
+  };
+
+  function makeGrid(rows, cols, oldGrid){
+    const g = [];
+    for(let r=0;r<rows;r++){
+      const row = [];
+      for(let c=0;c<cols;c++){
+        row.push(oldGrid && oldGrid[r] && oldGrid[r][c] !== undefined ? oldGrid[r][c] : null);
+      }
+      g.push(row);
+    }
+    return g;
+  }
+  pState.grid = makeGrid(pState.rows, pState.cols, null);
+
+  function toolById(id){ return pState.tools.find(t => t.id === id); }
+
+  // --- undo (PNG composer) — see the matching note in SVG mode; the same
+  // snapshot approach, just against pState. dataUrl strings make each
+  // snapshot heavier than SVG's, but still fine at this scale. ---
+  const MAX_UNDO_PNG = 50;
+  function pushUndoPng(){
+    pState.undoStack.push(JSON.stringify({
+      tools: pState.tools, grid: pState.grid, freeStamps: pState.freeStamps, selectedTool: pState.selectedTool
+    }));
+    if(pState.undoStack.length > MAX_UNDO_PNG) pState.undoStack.shift();
+  }
+  function undoPng(){
+    if(pState.undoStack.length === 0) return;
+    const snap = JSON.parse(pState.undoStack.pop());
+    pState.tools = snap.tools;
+    pState.grid = snap.grid;
+    pState.freeStamps = snap.freeStamps;
+    pState.selectedTool = snap.selectedTool;
+    renderToolbox();
+    renderGrid();
+  }
+  window.__undo = window.__undo || {};
+  window.__undo.png = undoPng;
+  document.getElementById('pUndoBtn').addEventListener('click', undoPng);
+
+  // --- tinting: PNGs can't use currentColor like SVGs, so recoloring is
+  // done by compositing a solid color through the image's alpha channel on
+  // an offscreen canvas. Always tint from originalDataUrl (the pristine
+  // upload/drawing) so repeated recolors never compound/degrade.
+  function tintDataUrl(dataUrl, color, cb){
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.drawImage(img, 0, 0);
+      cb(c.toDataURL('image/png'));
+    };
+    img.src = dataUrl;
+  }
+
+  function recolorTool(tool, color, cb){
+    tool.tintCache = tool.tintCache || {};
+    if(tool.tintCache[color]){ tool.dataUrl = tool.tintCache[color]; cb && cb(); return; }
+    tintDataUrl(tool.originalDataUrl || tool.dataUrl, color, (result) => {
+      tool.tintCache[color] = result;
+      tool.dataUrl = result;
+      cb && cb();
+    });
+  }
+
+  // precomputes each tool's fgOverride-tinted variant so the live grid can
+  // render synchronously once this settles, rather than flashing untinted
+  function refreshFgOverrideCache(cb){
+    if(!pState.fgOverride || pState.tools.length === 0){ cb && cb(); return; }
+    let remaining = pState.tools.length;
+    pState.tools.forEach(tool => {
+      tool.fgTintCache = tool.fgTintCache || {};
+      if(tool.fgTintCache[pState.fgColor]){
+        tool.fgOverrideDataUrl = tool.fgTintCache[pState.fgColor];
+        remaining--;
+        if(remaining === 0) cb && cb();
+        return;
+      }
+      tintDataUrl(tool.originalDataUrl || tool.dataUrl, pState.fgColor, (result) => {
+        tool.fgTintCache[pState.fgColor] = result;
+        tool.fgOverrideDataUrl = result;
+        remaining--;
+        if(remaining === 0) cb && cb();
+      });
+    });
+  }
+
+  function displayDataUrl(tool){
+    if(pState.fgOverride && tool.fgOverrideDataUrl) return tool.fgOverrideDataUrl;
+    return tool.dataUrl;
+  }
+
+  // --- default tools, rasterized at load time so the toolbox isn't empty ---
+  function rasterizeDefaults(){
+    const size = 100;
+    const defs = [
+      { name: 'Full', draw: (ctx) => { ctx.fillRect(0, 0, 100, 100); } },
+      { name: 'Circle', draw: (ctx) => { ctx.beginPath(); ctx.arc(50, 50, 42, 0, Math.PI*2); ctx.fill(); } },
+      { name: 'Quarter Circle', draw: (ctx) => {
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(100, 0);
+          ctx.arc(0, 0, 100, 0, Math.PI/2, false);
+          ctx.closePath();
+          ctx.fill();
+        } },
+      { name: 'Quarter Circle Neg', draw: (ctx) => {
+          ctx.beginPath();
+          ctx.moveTo(100, 0);
+          ctx.lineTo(100, 100);
+          ctx.lineTo(0, 100);
+          ctx.arc(0, 0, 100, Math.PI/2, 0, true);
+          ctx.closePath();
+          ctx.fill();
+        } }
+    ];
+    defs.forEach(def => {
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#1c1b1a';
+      def.draw(ctx);
+      const dataUrl = c.toDataURL('image/png');
+      pState.tools.push({
+        id: 'default-' + def.name.toLowerCase(), name: def.name, custom: false,
+        color: '#1c1b1a', dataUrl, originalDataUrl: dataUrl, rotation: 0
+      });
+    });
+  }
+  rasterizeDefaults();
+
+  function renderToolbox(){
+    const box = document.getElementById('pToolbox');
+    box.innerHTML = '';
+    pState.tools.forEach((tool, i) => {
+      const el = document.createElement('div');
+      el.className = 'tool' + (tool.custom ? ' custom' : '') + (pState.selectedTool === tool.id ? ' selected' : '');
+      el.innerHTML = `<img src="${tool.dataUrl}" style="transform:rotate(${tool.rotation}deg)">`;
+
+      if(i < 10){
+        const badge = document.createElement('div');
+        badge.className = 'keybadge';
+        badge.textContent = i === 9 ? '0' : String(i + 1);
+        el.appendChild(badge);
+      }
+
+      el.addEventListener('click', (e) => {
+        if(e.target.closest('.swatch') || e.target.closest('.del')) return;
+        pState.selectedTool = (pState.selectedTool === tool.id) ? null : tool.id;
+        renderToolbox();
+      });
+
+      const swatch = document.createElement('input');
+      swatch.type = 'color';
+      swatch.className = 'swatch';
+      swatch.value = tool.color;
+      swatch.title = 'Recolor';
+      swatch.addEventListener('input', (e) => {
+        tool.color = e.target.value;
+        recolorTool(tool, tool.color, () => { renderToolbox(); renderGrid(); });
+      });
+      el.appendChild(swatch);
+
+      if(tool.custom){
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = '✕';
+        del.title = 'Remove shape';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          pushUndoPng();
+          pState.tools = pState.tools.filter(t => t.id !== tool.id);
+          if(pState.selectedTool === tool.id) pState.selectedTool = null;
+          pState.grid = pState.grid.map(row => row.map(c => (c && c.tool === tool.id) ? null : c));
+          renderToolbox();
+          renderGrid();
+        });
+        el.appendChild(del);
+      }
+
+      box.appendChild(el);
+    });
+  }
+
+  function paintCell(r, c){
+    if(!pState.selectedTool || !pState.dragMode) return;
+    const current = pState.grid[r][c];
+    let next;
+    if(pState.dragMode === 'place'){
+      const tool = toolById(pState.selectedTool);
+      next = { tool: pState.selectedTool, rotation: tool ? tool.rotation : 0 };
+    }else{
+      next = null;
+    }
+    // skip no-op writes (e.g. re-crossing an already-painted cell mid-drag)
+    // so they don't spam the undo stack with identical snapshots
+    const unchanged = (!current && !next) ||
+      (current && next && current.tool === next.tool && current.rotation === next.rotation);
+    if(unchanged) return;
+    pushUndoPng();
+    pState.grid[r][c] = next;
+    renderGrid();
+  }
+
+  function renderGrid(){
+    const gridEl = document.getElementById('pGrid');
+    const wrap = gridEl.closest('.canvas-wrap');
+    gridEl.style.backgroundColor = pState.bgTransparent ? 'transparent' : pState.bgColor;
+    gridEl.style.gap = pState.gap + 'px';
+    gridEl.style.setProperty('--cellpad', pState.cellPadding + '%');
+
+    const availW = wrap.clientWidth - 60;
+    const availH = wrap.clientHeight - 60;
+    let cellSize = (availW - (pState.cols - 1) * pState.gap) / pState.cols;
+    if(cellSize * pState.rows + (pState.rows - 1) * pState.gap > availH){
+      cellSize = (availH - (pState.rows - 1) * pState.gap) / pState.rows;
+    }
+    // whole-pixel cell size only — see the matching note in the SVG-mode
+    // renderGrid for why this eliminates the size-dependent hairline gaps
+    cellSize = Math.floor(cellSize);
+    pState.currentCellPx = cellSize;
+
+    gridEl.style.gridTemplateColumns = `repeat(${pState.cols}, ${cellSize}px)`;
+    gridEl.style.gridTemplateRows = `repeat(${pState.rows}, ${cellSize}px)`;
+    gridEl.innerHTML = '';
+
+    for(let r=0;r<pState.rows;r++){
+      for(let c=0;c<pState.cols;c++){
+        const cellEl = document.createElement('div');
+        cellEl.className = 'cell';
+        cellEl.dataset.r = r;
+        cellEl.dataset.c = c;
+        const cellData = pState.grid[r][c];
+        if(cellData){
+          cellEl.style.zIndex = '1';
+          const tool = toolById(cellData.tool);
+          if(tool){
+            cellEl.innerHTML = `<img src="${displayDataUrl(tool)}" style="transform:rotate(${cellData.rotation}deg)">`;
+          }
+        }
+        cellEl.addEventListener('mousedown', (e) => {
+          if(!pState.selectedTool || pState.freeMode) return;
+          e.preventDefault();
+          const current = pState.grid[r][c];
+          pState.dragMode = (current && current.tool === pState.selectedTool) ? 'erase' : 'place';
+          pState.isDragging = true;
+          pState.lastDragCell = r + ',' + c;
+          paintCell(r, c);
+        });
+        gridEl.appendChild(cellEl);
+      }
+    }
+
+    renderFreeLayer(gridEl, cellSize);
+  }
+
+  function renderFreeLayer(gridEl, cellPx){
+    const layer = document.createElement('div');
+    layer.className = 'free-layer' + (pState.freeMode ? ' active' : '');
+
+    pState.freeStamps.forEach((stamp, idx) => {
+      const tool = toolById(stamp.tool);
+      if(!tool) return;
+      const el = document.createElement('div');
+      el.className = 'free-stamp';
+      el.dataset.idx = idx;
+      el.style.left = (stamp.x * cellPx) + 'px';
+      el.style.top = (stamp.y * cellPx) + 'px';
+      el.style.width = (stamp.size * cellPx) + 'px';
+      el.style.height = (stamp.size * cellPx) + 'px';
+      el.innerHTML = `<img src="${displayDataUrl(tool)}" style="transform:rotate(${stamp.rotation}deg)">`;
+      layer.appendChild(el);
+    });
+
+    layer.addEventListener('mousedown', (e) => {
+      if(!pState.freeMode || !pState.selectedTool) return;
+      e.preventDefault();
+      const stampEl = e.target.closest('.free-stamp');
+      if(stampEl){
+        const idx = parseInt(stampEl.dataset.idx, 10);
+        const stamp = pState.freeStamps[idx];
+        if(stamp && stamp.tool === pState.selectedTool){
+          pushUndoPng();
+          pState.freeStamps.splice(idx, 1);
+          renderGrid();
+          return;
+        }
+      }
+      const rect = layer.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / cellPx;
+      const y = (e.clientY - rect.top) / cellPx;
+      pState.isFreeDragging = true;
+      pState.freeDragLastPos = { x, y };
+      placeFreeStamp(x, y);
+    });
+    layer.addEventListener('mousemove', (e) => {
+      if(!pState.freeMode || !pState.isFreeDragging || !pState.selectedTool) return;
+      const rect = layer.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / cellPx;
+      const y = (e.clientY - rect.top) / cellPx;
+      const last = pState.freeDragLastPos;
+      const dist = last ? Math.hypot(x - last.x, y - last.y) : Infinity;
+      if(dist >= pState.freeStampSize * 0.6){
+        pState.freeDragLastPos = { x, y };
+        placeFreeStamp(x, y);
+      }
+    });
+
+    gridEl.appendChild(layer);
+  }
+
+  function placeFreeStamp(x, y){
+    const tool = toolById(pState.selectedTool);
+    if(!tool) return;
+    pushUndoPng();
+    pState.freeStamps.push({ x, y, size: pState.freeStampSize, tool: pState.selectedTool, rotation: tool.rotation });
+    renderGrid();
+  }
+
+  document.getElementById('pGrid').addEventListener('mousemove', (e) => {
+    if(!pState.isDragging) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if(!el || !el.classList.contains('cell')) return;
+    const key = el.dataset.r + ',' + el.dataset.c;
+    if(key === pState.lastDragCell) return;
+    pState.lastDragCell = key;
+    paintCell(parseInt(el.dataset.r, 10), parseInt(el.dataset.c, 10));
+  });
+
+  // --- controls ---
+  document.getElementById('pRows').addEventListener('input', (e) => {
+    pState.rows = Math.max(1, parseInt(e.target.value) || 1);
+    pState.grid = makeGrid(pState.rows, pState.cols, pState.grid);
+    renderGrid();
+  });
+  document.getElementById('pCols').addEventListener('input', (e) => {
+    pState.cols = Math.max(1, parseInt(e.target.value) || 1);
+    pState.grid = makeGrid(pState.rows, pState.cols, pState.grid);
+    renderGrid();
+  });
+  document.getElementById('pGap').addEventListener('input', (e) => {
+    pState.gap = Math.max(0, parseInt(e.target.value) || 0);
+    renderGrid();
+  });
+  document.getElementById('pCellPad').addEventListener('input', (e) => {
+    pState.cellPadding = Math.max(0, parseFloat(e.target.value) || 0);
+    renderGrid();
+  });
+  document.getElementById('pBgColor').addEventListener('input', (e) => {
+    pState.bgColor = e.target.value;
+    pState.bgTransparent = false;
+    document.getElementById('pBgTransparent').checked = false;
+    renderGrid();
+  });
+  document.getElementById('pBgTransparent').addEventListener('change', (e) => {
+    pState.bgTransparent = e.target.checked;
+    renderGrid();
+  });
+  document.getElementById('pFgOverrideChk').addEventListener('change', (e) => {
+    pState.fgOverride = e.target.checked;
+    refreshFgOverrideCache(renderGrid);
+  });
+  document.getElementById('pFgColor').addEventListener('input', (e) => {
+    pState.fgColor = e.target.value;
+    refreshFgOverrideCache(renderGrid);
+  });
+  document.getElementById('pFreeModeChk').addEventListener('change', (e) => {
+    pState.freeMode = e.target.checked;
+    document.getElementById('pFreeSizeField').style.display = pState.freeMode ? 'flex' : 'none';
+    renderGrid();
+  });
+  document.getElementById('pFreeSize').addEventListener('input', (e) => {
+    const parsed = parseFloat(e.target.value);
+    const pct = Math.max(10, Number.isNaN(parsed) ? 100 : parsed);
+    pState.freeStampSize = pct / 100;
+  });
+  document.getElementById('pClearBtn').addEventListener('click', () => {
+    pushUndoPng();
+    pState.grid = makeGrid(pState.rows, pState.cols, null);
+    pState.freeStamps = [];
+    renderGrid();
+  });
+
+  window.addEventListener('resize', () => { if(window.appMode === 'png') renderGrid(); });
+  window.addEventListener('mouseup', () => {
+    pState.isDragging = false; pState.dragMode = null; pState.lastDragCell = null;
+    pState.isFreeDragging = false; pState.freeDragLastPos = null;
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if(window.appMode !== 'png') return;
+    const active = document.activeElement;
+    if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+
+    if(e.key === ',' || e.key === '.'){
+      const tool = toolById(pState.selectedTool);
+      if(!tool) return;
+      pushUndoPng();
+      const delta = e.key === ',' ? -90 : 90;
+      tool.rotation = ((tool.rotation + delta) % 360 + 360) % 360;
+      renderToolbox();
+      return;
+    }
+
+    if(!/^[0-9]$/.test(e.key)) return;
+    const index = e.key === '0' ? 9 : parseInt(e.key, 10) - 1;
+    const tool = pState.tools[index];
+    if(!tool) return;
+
+    if(pState.selectedTool === tool.id){
+      pushUndoPng();
+      tool.rotation = (tool.rotation + 90) % 360;
+    }else{
+      pState.selectedTool = tool.id;
+    }
+    renderToolbox();
+  });
+
+  // --- adding tools: upload / import folder ---
+  function addPngFromDataUrl(dataUrl, name){
+    const id = 'custom-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+    pushUndoPng();
+    pState.tools.push({ id, name: name || 'Custom', custom: true, color: '#1c1b1a', dataUrl, originalDataUrl: dataUrl, rotation: 0 });
+    renderToolbox();
+    // pick up the active "Recolor shapes" override for this new tool too —
+    // otherwise it renders/exports in its own color until the override is
+    // toggled or the color changed again (no-op when fgOverride is off)
+    refreshFgOverrideCache(renderGrid);
+  }
+
+  document.getElementById('pUploadBtn').addEventListener('click', () => {
+    document.getElementById('p-file-input').click();
+  });
+  document.getElementById('p-file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => addPngFromDataUrl(ev.target.result, file.name.replace(/\.png$/i, ''));
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+
+  document.getElementById('pImportFolderBtn').addEventListener('click', () => {
+    document.getElementById('p-folder-input').click();
+  });
+  document.getElementById('p-folder-input').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files).filter(f =>
+      f.name.toLowerCase().endsWith('.png') || f.type === 'image/png'
+    );
+    if(files.length === 0){
+      alert('No .png files found in that folder.');
+    }else{
+      files.forEach(file => {
+        const reader = new FileReader();
+        const name = file.name.replace(/\.png$/i, '');
+        reader.onload = (ev) => addPngFromDataUrl(ev.target.result, name);
+        reader.readAsDataURL(file);
+      });
+    }
+    e.target.value = '';
+  });
+
+  document.getElementById('pClearToolboxBtn').addEventListener('click', () => {
+    if(pState.tools.length === 0) return;
+    if(!confirm('Remove every shape from the toolbox? This also clears any stamped cells using them.')) return;
+    pushUndoPng();
+    pState.tools = [];
+    pState.selectedTool = null;
+    pState.grid = makeGrid(pState.rows, pState.cols, null);
+    renderToolbox();
+    renderGrid();
+  });
+
+  document.getElementById('pExportToolboxBtn').addEventListener('click', () => {
+    if(pState.tools.length === 0){
+      alert('The toolbox is empty.');
+      return;
+    }
+    const zip = new JSZip();
+    const usedNames = new Set();
+    pState.tools.forEach((tool) => {
+      const base64 = tool.dataUrl.split(',')[1];
+      let base = (tool.name || 'shape').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'shape';
+      let filename = `${base}.png`, n = 2;
+      while(usedNames.has(filename)){ filename = `${base}-${n++}.png`; }
+      usedNames.add(filename);
+      zip.file(filename, base64, { base64: true });
+    });
+    zip.generateAsync({ type: 'blob' }).then(blob => download('toolbox-pngs.zip', blob));
+  });
+
+  // --- pixel drawing tool ---
+  const pixelTool = {
+    logicalSize: 64,
+    guideCount: 8,
+    brushSize: 3,
+    brushShape: 'square',
+    eraser: false,
+    isDrawing: false,
+    undoStack: []
+  };
+  const pixelOffscreen = document.createElement('canvas');
+  pixelOffscreen.width = pixelTool.logicalSize;
+  pixelOffscreen.height = pixelTool.logicalSize;
+  const pixelOffCtx = pixelOffscreen.getContext('2d');
+
+  // --- undo (pixel drawing tool) — snapshots the actual bitmap via
+  // getImageData/putImageData rather than diffing draw operations, since
+  // a freehand stroke is much simpler to treat as "pixels before" vs
+  // "pixels after" than to reconstruct from brush events. One snapshot
+  // per stroke (taken at mousedown, not per dab), so a whole stroke
+  // undoes in one step rather than pixel-by-pixel.
+  const MAX_UNDO_PIXEL = 50;
+  function pushUndoPixel(){
+    pixelTool.undoStack.push(pixelOffCtx.getImageData(0, 0, pixelTool.logicalSize, pixelTool.logicalSize));
+    if(pixelTool.undoStack.length > MAX_UNDO_PIXEL) pixelTool.undoStack.shift();
+  }
+  function undoPixel(){
+    if(pixelTool.undoStack.length === 0) return;
+    const imgData = pixelTool.undoStack.pop();
+    pixelOffCtx.putImageData(imgData, 0, 0);
+    renderPixelCanvas();
+  }
+  window.__undo = window.__undo || {};
+  window.__undo.pngPixel = undoPixel;
+
+  function renderPixelCanvas(){
+    const canvas = document.getElementById('pixelCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(pixelOffscreen, 0, 0, canvas.width, canvas.height);
+
+    const step = canvas.width / pixelTool.guideCount;
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    for(let i=0;i<=pixelTool.guideCount;i++){
+      const pos = Math.round(i * step) + 0.5;
+      ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(canvas.width, pos); ctx.stroke();
+    }
+  }
+
+  function paintPixelAt(lx, ly){
+    pixelOffCtx.save();
+    if(pixelTool.eraser){
+      pixelOffCtx.globalCompositeOperation = 'destination-out';
+    }else{
+      pixelOffCtx.globalCompositeOperation = 'source-over';
+      pixelOffCtx.fillStyle = '#000000';
+    }
+    const s = pixelTool.brushSize;
+    if(pixelTool.brushShape === 'square'){
+      pixelOffCtx.fillRect(Math.round(lx - s/2), Math.round(ly - s/2), s, s);
+    }else{
+      pixelOffCtx.beginPath();
+      pixelOffCtx.arc(lx, ly, s/2, 0, Math.PI*2);
+      pixelOffCtx.fill();
+    }
+    pixelOffCtx.restore();
+    renderPixelCanvas();
+  }
+
+  function pixelEventToLogical(e){
+    const canvas = document.getElementById('pixelCanvas');
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+    const dispX = (e.clientX - rect.left) * scaleX, dispY = (e.clientY - rect.top) * scaleY;
+    const zoom = canvas.width / pixelTool.logicalSize;
+    return { x: dispX / zoom, y: dispY / zoom };
+  }
+
+  const pixelCanvasEl = document.getElementById('pixelCanvas');
+  pixelCanvasEl.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    pixelTool.isDrawing = true;
+    pushUndoPixel();
+    const { x, y } = pixelEventToLogical(e);
+    paintPixelAt(x, y);
+  });
+  pixelCanvasEl.addEventListener('mousemove', (e) => {
+    if(!pixelTool.isDrawing) return;
+    const { x, y } = pixelEventToLogical(e);
+    paintPixelAt(x, y);
+  });
+  window.addEventListener('mouseup', () => { pixelTool.isDrawing = false; });
+
+  document.getElementById('pixelGuide').addEventListener('input', (e) => {
+    pixelTool.guideCount = Math.max(1, parseInt(e.target.value) || 1);
+    renderPixelCanvas();
+  });
+  document.getElementById('pixelBrushSize').addEventListener('input', (e) => {
+    pixelTool.brushSize = Math.max(1, parseInt(e.target.value) || 1);
+  });
+  function updateBrushButtons(){
+    document.getElementById('pixelBrushSquare').classList.toggle('toggled', pixelTool.brushShape === 'square');
+    document.getElementById('pixelBrushRound').classList.toggle('toggled', pixelTool.brushShape === 'round');
+  }
+  document.getElementById('pixelBrushSquare').addEventListener('click', () => {
+    pixelTool.brushShape = 'square'; updateBrushButtons();
+  });
+  document.getElementById('pixelBrushRound').addEventListener('click', () => {
+    pixelTool.brushShape = 'round'; updateBrushButtons();
+  });
+  document.getElementById('pixelEraserBtn').addEventListener('click', (e) => {
+    pixelTool.eraser = !pixelTool.eraser;
+    e.currentTarget.classList.toggle('toggled', pixelTool.eraser);
+  });
+  document.getElementById('pixelClearBtn').addEventListener('click', () => {
+    pushUndoPixel();
+    pixelOffCtx.clearRect(0, 0, pixelTool.logicalSize, pixelTool.logicalSize);
+    renderPixelCanvas();
+  });
+  document.getElementById('pixelUndoBtn').addEventListener('click', undoPixel);
+  document.getElementById('pixelAddBtn').addEventListener('click', () => {
+    const dataUrl = pixelOffscreen.toDataURL('image/png');
+    const id = 'custom-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+    pState.tools.push({ id, name: 'Drawn', custom: true, color: '#1c1b1a', dataUrl, originalDataUrl: dataUrl, rotation: 0 });
+    renderToolbox();
+    refreshFgOverrideCache(renderGrid);
+    pixelOffCtx.clearRect(0, 0, pixelTool.logicalSize, pixelTool.logicalSize);
+    renderPixelCanvas();
+    document.getElementById('pixelModal').classList.remove('open');
+  });
+  document.getElementById('pDrawBtn').addEventListener('click', () => {
+    document.getElementById('pixelModal').classList.add('open');
+    renderPixelCanvas();
+  });
+  document.getElementById('pixelCloseBtn').addEventListener('click', () => {
+    document.getElementById('pixelModal').classList.remove('open');
+  });
+
+  // --- export ---
+  function download(filename, blob){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function loadImage(src){
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.src = src;
+    });
+  }
+
+  // Renders the full composition to an offscreen canvas — shared by PNG
+  // and PDF export. Each distinct tool image is only decoded once.
+  async function buildCompositionCanvas(){
+    const unit = 100;
+    const gapUnit = pState.gap;
+    const fullSize = pState.cols * unit + (pState.cols - 1) * gapUnit; // square, 1:1 locked
+    const scale = 3; // oversample for a crisper raster export
+    const canvas = document.createElement('canvas');
+    canvas.width = fullSize * scale;
+    canvas.height = fullSize * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.imageSmoothingEnabled = true;
+
+    if(!pState.bgTransparent){
+      ctx.fillStyle = pState.bgColor;
+      ctx.fillRect(0, 0, fullSize, fullSize);
+    }
+
+    const imgCache = {};
+    for(let r=0;r<pState.rows;r++){
+      for(let c=0;c<pState.cols;c++){
+        const cellData = pState.grid[r][c];
+        if(!cellData) continue;
+        const tool = toolById(cellData.tool);
+        if(!tool) continue;
+        const src = displayDataUrl(tool);
+        if(!imgCache[src]) imgCache[src] = await loadImage(src);
+        const img = imgCache[src];
+
+        const x = c * (unit + gapUnit), y = r * (unit + gapUnit);
+        const padX = unit * (pState.cellPadding / 100), padY = unit * (pState.cellPadding / 100);
+        const innerW = unit - padX * 2, innerH = unit - padY * 2;
+        const cx = x + unit/2, cy = y + unit/2;
+        const rot = (cellData.rotation || 0) * Math.PI / 180;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rot);
+        ctx.drawImage(img, -innerW/2, -innerH/2, innerW, innerH);
+        ctx.restore();
+      }
+    }
+
+    // free-form stamps use the same unit scale as a grid cell
+    for(const stamp of pState.freeStamps){
+      const tool = toolById(stamp.tool);
+      if(!tool) continue;
+      const src = displayDataUrl(tool);
+      if(!imgCache[src]) imgCache[src] = await loadImage(src);
+      const img = imgCache[src];
+      const size = stamp.size * (unit + gapUnit);
+      const cx = stamp.x * (unit + gapUnit);
+      const cy = stamp.y * (unit + gapUnit);
+      const rot = (stamp.rotation || 0) * Math.PI / 180;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+      ctx.drawImage(img, -size/2, -size/2, size, size);
+      ctx.restore();
+    }
+    return canvas;
+  }
+
+  document.getElementById('pExportPng').addEventListener('click', async () => {
+    const canvas = await buildCompositionCanvas();
+    canvas.toBlob((blob) => download('grid-composition.png', blob), 'image/png');
+  });
+
+  document.getElementById('pExportPdf').addEventListener('click', async () => {
+    const canvas = await buildCompositionCanvas();
+    const { jsPDF } = window.jspdf;
+    const w = canvas.width, h = canvas.height;
+    const pdf = new jsPDF({ orientation: w >= h ? 'landscape' : 'portrait', unit: 'pt', format: [w, h] });
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
+    pdf.save('grid-composition.pdf');
+  });
+
+  document.getElementById('pExportSvg').addEventListener('click', () => {
+    const unit = 100;
+    const gapUnit = pState.gap;
+    const fullSize = pState.cols * unit + (pState.cols - 1) * gapUnit;
+    let inner = pState.bgTransparent ? '' : `<rect x="0" y="0" width="${fullSize}" height="${fullSize}" fill="${pState.bgColor}"/>`;
+
+    for(let r=0;r<pState.rows;r++){
+      for(let c=0;c<pState.cols;c++){
+        const cellData = pState.grid[r][c];
+        if(!cellData) continue;
+        const tool = toolById(cellData.tool);
+        if(!tool) continue;
+        const x = c * (unit + gapUnit), y = r * (unit + gapUnit);
+        const padX = unit * (pState.cellPadding / 100), padY = unit * (pState.cellPadding / 100);
+        const innerW = unit - padX * 2, innerH = unit - padY * 2;
+        const cx = x + unit/2, cy = y + unit/2;
+        const rot = cellData.rotation || 0;
+        inner += `<g transform="rotate(${rot} ${cx} ${cy})"><image href="${displayDataUrl(tool)}" x="${x + padX}" y="${y + padY}" width="${innerW}" height="${innerH}"/></g>`;
+      }
+    }
+
+    pState.freeStamps.forEach(stamp => {
+      const tool = toolById(stamp.tool);
+      if(!tool) return;
+      const size = stamp.size * (unit + gapUnit);
+      const cx = stamp.x * (unit + gapUnit);
+      const cy = stamp.y * (unit + gapUnit);
+      const rot = stamp.rotation || 0;
+      inner += `<g transform="rotate(${rot} ${cx} ${cy})"><image href="${displayDataUrl(tool)}" x="${cx - size/2}" y="${cy - size/2}" width="${size}" height="${size}"/></g>`;
+    });
+
+    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${fullSize} ${fullSize}" width="${fullSize}" height="${fullSize}">${inner}</svg>`;
+    download('grid-composition.svg', new Blob([svgStr], { type: 'image/svg+xml' }));
+  });
+
+  renderToolbox();
+  renderGrid();
+})();
+</script>
+
+<script>
+  // --- mode switch ---
+  (function(){
+    const svgBtn = document.getElementById('modeSvgBtn');
+    const pngBtn = document.getElementById('modePngBtn');
+    const svgApp = document.getElementById('svgApp');
+    const pngApp = document.getElementById('pngApp');
+
+    function setMode(mode){
+      window.appMode = mode;
+      svgApp.style.display = mode === 'svg' ? '' : 'none';
+      pngApp.style.display = mode === 'png' ? '' : 'none';
+      svgBtn.classList.toggle('active', mode === 'svg');
+      pngBtn.classList.toggle('active', mode === 'png');
+      window.dispatchEvent(new Event('resize'));
+    }
+    svgBtn.addEventListener('click', () => setMode('svg'));
+    pngBtn.addEventListener('click', () => setMode('png'));
+    setMode('svg');
+  })();
+
+  // --- global Ctrl/Cmd+Z router — dispatches to whichever context is
+  // actually active: an open drawer modal takes priority over the
+  // composer behind it, and otherwise it's whichever mode (SVG/PNG) the
+  // top switch is currently on. Each context keeps its own independent
+  // undo history (populated by the two mode scripts via window.__undo).
+  (function(){
+    window.addEventListener('keydown', (e) => {
+      const isUndo = (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z');
+      if(!isUndo) return;
+      const active = document.activeElement;
+      if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+      if(!window.__undo) return;
+      e.preventDefault();
+
+      const pixelOpen = document.getElementById('pixelModal').classList.contains('open');
+      const shapeOpen = document.getElementById('shapeModal').classList.contains('open');
+
+      if(pixelOpen && window.__undo.pngPixel) window.__undo.pngPixel();
+      else if(shapeOpen && window.__undo.svgShape) window.__undo.svgShape();
+      else if(window.appMode === 'png' && window.__undo.png) window.__undo.png();
+      else if(window.__undo.svg) window.__undo.svg();
+    });
+  })();
+</script>
+
 </body>
 </html>
