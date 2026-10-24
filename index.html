@@ -232,6 +232,7 @@
                             <li><button class="nav-btn" data-target="img-gedt" onclick="changeText29()">Crop &amp; Overlay</button></li>
                             <li><button class="nav-btn" data-target="img-shpc" onclick="changeText30()">Shape Cutter</button></li>
                             <li><button class="nav-btn" data-target="img-gifcp" onclick="changeText31()">GIF Compressor</button></li>
+                            <li><button class="nav-btn" data-target="img-t3d" onclick="changeText37()">3D Text GIF</button></li>
                         </ul>
 
                         <p class="tool-desc">Select a tool above to see how it works.</p>
@@ -289,6 +290,7 @@
             <img id="img-gifcp" src="images/gifcp.png" alt="Preview of the GIF Compressor tool">
             <img id="img-acut" src="images/acut.png" alt="Preview of the Audio Cutter tool">
             <img id="img-mp3c" src="images/mp3c.png" alt="Preview of the MP3 Compressor tool">
+            <img id="img-t3d" src="images/t3d.png" alt="Preview of the 3D Text GIF tool">
             <img id="img-vdrw" src="images/vdrw.png" alt="Preview of the Vector Draw tool">
         </div>
     </div>
@@ -350,7 +352,7 @@
         // The JavaScript function called by the button
         // Each uses innerHTML (not textContent) so the <a> tag renders as a real link
         function changeText1() {
-            setToolText('Learn more about this project: <a href="project-info.html" target="_blank">View Project Info</a>');
+            setToolText('Learn more about this project: <a href="https://github.com/AHeathNE/littletoolsandtoys" target="_blank" rel="noopener">View on GitHub</a>');
         }
         function changeText2() {
             setToolText('See how the Compressor works: <a href="compressor.html" target="_blank">View Compressor</a>');
@@ -453,6 +455,9 @@
         }
         function changeText35() {
             setToolText('See how Poster Grid Studio works: <a href="poster-grid-studio-4.html" target="_blank">View Poster Grid Studio</a>');
+        }
+        function changeText37() {
+            setToolText('See how 3D Text GIF works: <a href="text-gif-3d.html" target="_blank">View 3D Text GIF</a>');
         }
         function changeText36() {
             setToolText('See how Vector Draw works: <a href="vector-draw.html" target="_blank">View Vector Draw</a>');
