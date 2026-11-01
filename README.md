@@ -22,6 +22,7 @@ Every tool page shows a small `v2026.09.18`-style tag in its bottom-right corner
 | JPEG Compressor Batch | `jpeg-compressor-batch.html` | v2026.08.30 |
 | Enlarger | `enlarger.html` | v2026.08.30 |
 | Grid Shuffler | `image-grid-shuffler.html` | v2026.08.30 |
+| Backdrop | `texture-generator.html` | v2026.11.01 |
 | **Printing** | | |
 | Layout Tool | `layout-tool.html` | v2026.08.30 |
 | Signature Press | `signature_press.html` | v2026.08.30 |

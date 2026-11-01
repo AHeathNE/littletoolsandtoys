@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backdrop — texture generator</title>
+<style>
+  :root {
+    --ink: #1b1a17;
+    --paper: #efe9dd;
+    --paper-raised: #f7f3ea;
+    --brass: #8a6d3b;
+    --brass-dark: #5f4a24;
+    --rust: #a3401f;
+    --line: #c9bfa8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); font-family: Georgia, 'Times New Roman', serif; }
+  .app { display: grid; grid-template-columns: 330px 1fr; height: 100vh; }
+  aside { border-right: 1px solid var(--line); background: var(--paper-raised); overflow-y: auto; padding: 22px 20px 30px; }
+  .kicker { font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: .04em; color: var(--brass-dark); margin: 0 0 4px; }
+  h1 { font-size: 34px; line-height: 1; margin: 0 0 18px; font-weight: 400; letter-spacing: -.01em; border-bottom: 3px double var(--ink); padding-bottom: 12px; }
+  label, .lbl { display: block; font-family: 'Courier New', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--brass-dark); margin: 16px 0 6px; }
+  .lbl span { float: right; color: var(--ink); }
+  select, input[type=number], input[type=text] { width: 100%; font: 14px Georgia, serif; padding: 7px 8px; background: var(--paper); border: 1px solid var(--line); color: var(--ink); border-radius: 0; }
+  input[type=range] { width: 100%; accent-color: var(--brass); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; min-width: 0; }
+  .swatches { display: flex; gap: 6px; }
+  .swatches input { flex: 1; min-width: 0; height: 38px; padding: 0; border: 1px solid var(--line); background: none; cursor: pointer; }
+  button { font: 14px Georgia, serif; padding: 9px 12px; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); cursor: pointer; border-radius: 0; }
+  button:hover { background: var(--ink); color: var(--paper); }
+  button.primary { background: var(--rust); border-color: var(--rust); color: #fff; }
+  button.primary:hover { background: var(--ink); border-color: var(--ink); }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btns button { flex: 1; }
+  main { display: flex; align-items: center; justify-content: center; padding: 28px; min-width: 0; min-height: 0;
+    background: repeating-conic-gradient(#e4ddcc 0 25%, var(--paper) 0 50%) 0 0 / 20px 20px; }
+  canvas#view { max-width: 100%; max-height: 100%; box-shadow: 0 8px 30px rgba(27,26,23,.3); }
+  .status { font-family: 'Courier New', monospace; font-size: 11px; color: var(--brass-dark); margin-top: 10px; min-height: 14px; }
+  @media (max-width: 800px) { .app { grid-template-columns: 1fr; height: auto; } main { height: 60vh; } aside { border-right: 0; border-bottom: 1px solid var(--line); } }
+  h1 { display: flex; align-items: center; justify-content: space-between; }
+  #help { width: 28px; height: 28px; padding: 0; border-radius: 50%; font: 700 15px Georgia, serif; line-height: 1; }
+  .layer { border: 1px solid var(--line); background: var(--paper); padding: 10px; margin-top: 10px; }
+  .layer.hidden-layer { opacity: .55; }
+  .layer .head { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+  .layer .head b { flex: 1; font: 11px 'Courier New', monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--brass-dark); }
+  .layer .head button { padding: 2px 7px; font-size: 13px; min-width: 26px; }
+  .layer .head button:disabled { opacity: .3; pointer-events: none; }
+  .layer .lbl { margin: 8px 0 4px; }
+  #modal { position: fixed; inset: 0; background: rgba(27,26,23,.6); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
+  #modal[hidden] { display: none; }
+  #modal .panel { background: var(--paper-raised); border: 1px solid var(--ink); max-width: 960px; max-height: 92vh; overflow-y: auto; padding: 26px 28px 20px; position: relative; }
+  #modal h2 { font-size: 30px; font-weight: 400; margin: 0 0 10px; }
+  #modal .intro { max-width: 640px; line-height: 1.45; margin: 0 0 16px; }
+  #closeModal { position: absolute; top: 12px; right: 12px; padding: 4px 9px; }
+  .ref { display: flex; align-items: center; gap: 14px; padding-bottom: 18px; border-bottom: 3px double var(--ink); margin-bottom: 18px; }
+  .ref .op { font-size: 28px; color: var(--brass-dark); }
+  #ex-color { width: 200px; height: 130px; background: #ff1f6b; }
+  figure { margin: 0; } figcaption { font-size: 13px; margin-top: 4px; } figcaption small { color: var(--brass-dark); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; }
+  .card canvas { width: 100%; height: auto; display: block; border: 1px solid var(--line); }
+  .card h3 { margin: 6px 0 2px; font-size: 17px; font-weight: 700; }
+  .card p { margin: 0; font-size: 13px; line-height: 1.4; }
+  .hint { font-size: 12px; color: var(--brass-dark); margin-top: 6px; }
+  .photo { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .photo button { flex: 1; }
+  .photo select { flex: 1; }
+  .photo .fname { flex-basis: 100%; font: 11px 'Courier New', monospace; color: var(--brass-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .credit { font-size: 12px; color: var(--brass-dark); margin: 20px 0 0; }
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <p class="kicker">little design tools</p>
+  <h1>Backdrop <button id="help" title="What do the blend modes do?" aria-label="Blend mode guide">?</button></h1>
+
+  <label for="palette">Palette</label>
+  <select id="palette"></select>
+  <div class="swatches" id="swatches" style="margin-top:8px"></div>
+
+  <div class="lbl">Complexity <span id="v-complexity"></span></div>
+  <input type="range" id="complexity" min="1" max="10" value="5">
+  <div class="lbl">Softness <span id="v-softness"></span></div>
+  <input type="range" id="softness" min="0" max="100" value="60">
+  <div class="lbl">Grain <span id="v-grain"></span></div>
+  <input type="range" id="grain" min="0" max="100" value="25">
+  <div class="lbl">Angle <span id="v-angle"></span></div>
+  <input type="range" id="angle" min="0" max="180" value="30">
+
+  <div class="lbl" style="margin-top:22px;border-top:1px solid var(--line);padding-top:14px">Tone</div>
+  <div class="lbl">Brightness <span id="v-brightness"></span></div>
+  <input type="range" id="brightness" min="-100" max="100" value="0">
+  <div class="lbl">Contrast <span id="v-contrast"></span></div>
+  <input type="range" id="contrast" min="-100" max="100" value="0">
+  <div class="lbl">Highlights <span id="v-highlights"></span></div>
+  <input type="range" id="highlights" min="0" max="100" value="100">
+
+  <div class="lbl" style="margin-top:22px;border-top:1px solid var(--line);padding-top:14px">Layers <span><a href="#" id="help2" style="color:var(--rust)">what do blends do?</a></span></div>
+  <div id="layers"></div>
+  <div class="row" style="margin-top:10px">
+    <button id="addLayer">+ Layer</button>
+    <button id="addPhoto">+ Photo</button>
+    <button id="addWarp">+ Distort</button>
+  </div>
+
+  <div class="lbl">Seed <span id="v-seed"></span></div>
+  <div class="row">
+    <button id="shuffle" class="primary">Shuffle ⟳</button>
+    <button id="shufflePal">Random colors</button>
+  </div>
+
+  <label for="size">Size</label>
+  <select id="size">
+    <option value="1920x1080">1920 × 1080 — HD</option>
+    <option value="3840x2160">3840 × 2160 — 4K</option>
+    <option value="1080x1080">1080 × 1080 — Square</option>
+    <option value="1080x1920">1080 × 1920 — Story</option>
+    <option value="2480x3508">2480 × 3508 — A4 @300</option>
+    <option value="3300x2550">3300 × 2550 — Letter landscape</option>
+    <option value="custom">Custom…</option>
+  </select>
+  <div class="row" id="customSize" style="margin-top:8px;display:none">
+    <input type="number" id="cw" value="1920" min="64" max="8000">
+    <input type="number" id="ch" value="1080" min="64" max="8000">
+  </div>
+
+  <div class="btns">
+    <button id="png" class="primary">Export PNG</button>
+    <button id="pdf" class="primary">Export PDF</button>
+  </div>
+  <div class="status" id="status"></div>
+</aside>
+<main><canvas id="view"></canvas></main>
+</div>
+
+<div id="modal" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="mt">
+    <button id="closeModal" aria-label="Close">✕</button>
+    <p class="kicker">blend mode guide</p>
+    <h2 id="mt">What the blend modes do</h2>
+    <p class="intro">Each layer is blended over everything beneath it. Below, the same bold color layer is laid over a castle in every mode, so you can compare the effects directly. Opacity then fades the effect in or out.</p>
+    <div class="ref">
+      <figure><canvas id="ex-orig" width="200" height="130"></canvas><figcaption>Base layer<br><small>a castle print</small></figcaption></figure>
+      <span class="op">+</span>
+      <figure><div id="ex-color"></div><figcaption>Top layer<br><small>solid hot pink</small></figcaption></figure>
+    </div>
+    <div class="grid" id="exGrid"></div>
+    <p class="credit">Castle: <em>Windsor Castle, Berkshire</em>, from Morris's <em>County Seats</em> (1866), public domain, via Wikimedia Commons.</p>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const PALETTES = {
+  'Sunset':    ['#ff6b35','#f7c59f','#efefd0','#004e89','#1a659e'],
+  'Candy':     ['#ff9ff3','#feca57','#ff6b6b','#48dbfb','#1dd1a1'],
+  'Aurora':    ['#0b132b','#1c2541','#3a506b','#5bc0be','#6fffe9'],
+  'Mint & Plum':['#2d1e2f','#5b3a6e','#b8a1d9','#9be8c8','#f4fff8'],
+  'Mid-century':['#d1495b','#edae49','#00798c','#30638e','#003d5b'],
+  'Peach fuzz': ['#ffbe98','#ff9a76','#ffd9c0','#f2e3d5','#c97b63'],
+  'Ocean':     ['#03045e','#0077b6','#00b4d8','#90e0ef','#caf0f8'],
+  'Riso':      ['#ff48b0','#ffe800','#00a95c','#0078bf','#f15060'],
+  'Forest':    ['#1b4332','#2d6a4f','#52b788','#b7e4c7','#f1faee'],
+  'Mono ink':  ['#111111','#444444','#888888','#cccccc','#f5f5f5'],
+};
+
+const state = { seed: 1, colors: [...PALETTES['Sunset']] };
+const view = $('view');
+
+// ---------- seeded random ----------
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function rgba(h, a) { const [r, g, b] = hexToRgb(h); return `rgba(${r},${g},${b},${a})`; }
+const pick = (arr, r) => arr[Math.floor(r() * arr.length)];
+
+// ---------- pattern drawers (all in fractions of canvas size) ----------
+const DRAW = {
+  mesh(ctx, w, h, P, r) {
+    const c = P.colors, m = Math.min(w, h), D = Math.hypot(w, h);
+    ctx.fillStyle = c[0]; ctx.fillRect(0, 0, w, h);
+    const n = 4 + P.complexity * 2;
+    const hard = 1 - P.softness / 100; // 0 = fully soft
+    for (let i = 0; i < n; i++) {
+      const x = r() * w, y = r() * h;
+      const rad = (0.25 + r() * 0.5) * D * (0.5 + P.softness / 150);
+      const col = c[(i + 1) % c.length];
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, rgba(col, 0.95));
+      g.addColorStop(Math.max(0.05, hard * 0.7), rgba(col, 0.85 - hard * 0.2));
+      g.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    }
+  },
+
+  waves(ctx, w, h, P, r) {
+    const c = P.colors, bands = 3 + P.complexity * 2;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, c[0]); g.addColorStop(1, c[1]);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(w / 2, h / 2); ctx.rotate((P.angle - 90) * Math.PI / 180);
+    const D = Math.hypot(w, h);
+    ctx.translate(-D / 2, -D / 2);
+    const amp = D * (0.02 + (P.softness / 100) * 0.1);
+    for (let i = 0; i < bands; i++) {
+      const base = (i + 0.5) / bands * D;
+      const k1 = (1 + r() * 2.5) * Math.PI * 2 / D, k2 = (2 + r() * 4) * Math.PI * 2 / D;
+      const p1 = r() * 6.28, p2 = r() * 6.28, a1 = amp * (0.6 + r()), a2 = amp * 0.4 * r();
+      ctx.beginPath(); ctx.moveTo(0, D);
+      for (let x = 0; x <= D; x += D / 240)
+        ctx.lineTo(x, base + Math.sin(x * k1 + p1) * a1 + Math.sin(x * k2 + p2) * a2);
+      ctx.lineTo(D, D); ctx.closePath();
+      ctx.fillStyle = c[(i + 2) % c.length]; ctx.globalAlpha = 0.55 + r() * 0.45;
+      ctx.fill();
+    }
+    ctx.restore();
+  },
+
+  rings(ctx, w, h, P, r) {
+    const c = P.colors, D = Math.hypot(w, h);
+    ctx.fillStyle = c[0]; ctx.fillRect(0, 0, w, h);
+    const centers = 1 + Math.floor(P.complexity / 3);
+    for (let k = 0; k < centers; k++) {
+      const x = r() * w, y = r() * h, rings = 6 + P.complexity * 3;
+      const step = D * (0.9 + r() * 0.4) / rings / centers * (1.4 - P.softness / 250);
+      ctx.globalAlpha = k === 0 ? 1 : 0.6;
+      for (let i = rings; i > 0; i--) {
+        ctx.beginPath(); ctx.arc(x, y, i * step, 0, 6.2832);
+        ctx.fillStyle = c[(i + k) % c.length]; ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  },
+
+  dots(ctx, w, h, P, r) {
+    const c = P.colors, m = Math.min(w, h);
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, c[0]); g.addColorStop(1, c[1]);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    const cell = m / (8 + P.complexity * 4), a = P.angle * Math.PI / 180;
+    const fx = Math.cos(a), fy = Math.sin(a), ox = r() * 6, oy = r() * 6;
+    const col = c[2], col2 = c[3];
+    for (let y = cell / 2; y < h + cell; y += cell) {
+      for (let x = ((Math.round(y / cell) % 2) ? cell / 2 : 0); x < w + cell; x += cell) {
+        const t = ((x / w) * fx + (y / h) * fy + 0.5 * (1 - fx - fy) + Math.sin(x / m * 3 + ox) * 0.15 + Math.sin(y / m * 3 + oy) * 0.15);
+        const s = Math.max(0, Math.min(1, t)) * cell * (0.25 + P.softness / 220);
+        ctx.beginPath(); ctx.arc(x, y, s, 0, 6.2832);
+        ctx.fillStyle = t > 0.6 ? col2 : col; ctx.fill();
+      }
+    }
+  },
+
+  terrazzo(ctx, w, h, P, r) {
+    const c = P.colors, m = Math.min(w, h);
+    ctx.fillStyle = c[0]; ctx.fillRect(0, 0, w, h);
+    const n = Math.round(30 + P.complexity * 45 * (w * h) / (1920 * 1080) ** 1 * 0.6);
+    for (let i = 0; i < n; i++) {
+      const x = r() * w, y = r() * h, s = m * (0.012 + r() ** 2 * 0.07);
+      const sides = 4 + Math.floor(r() * 4), rot = r() * 6.28;
+      ctx.beginPath();
+      for (let j = 0; j < sides; j++) {
+        const ang = rot + j / sides * 6.2832, rr = s * (0.55 + r() * 0.6 * (1 - P.softness / 160));
+        j ? ctx.lineTo(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr * 0.8) : ctx.moveTo(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr * 0.8);
+      }
+      ctx.closePath(); ctx.fillStyle = c[1 + Math.floor(r() * (c.length - 1))]; ctx.fill();
+    }
+  },
+
+  stripes(ctx, w, h, P, r) {
+    const c = P.colors, D = Math.hypot(w, h);
+    ctx.fillStyle = c[0]; ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(w / 2, h / 2); ctx.rotate(P.angle * Math.PI / 180);
+    let x = -D / 2;
+    const avg = D / (4 + P.complexity * 4);
+    while (x < D / 2) {
+      const sw = avg * (0.25 + r() * 1.5 * (0.4 + P.softness / 100));
+      const col = pick(c, r);
+      if (P.softness > 40) {
+        const g = ctx.createLinearGradient(x, 0, x + sw, 0);
+        g.addColorStop(0, rgba(col, 0)); g.addColorStop(0.5, rgba(col, 1)); g.addColorStop(1, rgba(col, 0));
+        ctx.fillStyle = g;
+      } else ctx.fillStyle = col;
+      ctx.fillRect(x, -D / 2, sw, D);
+      x += sw * (P.softness > 40 ? 0.7 : 1);
+    }
+    ctx.restore();
+  },
+};
+
+// ---------- grain ----------
+let grainTile = null;
+function getGrainTile() {
+  if (grainTile) return grainTile;
+  const t = document.createElement('canvas'); t.width = t.height = 256;
+  const x = t.getContext('2d'), d = x.createImageData(256, 256), r = rng(99);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = r() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  return grainTile = t;
+}
+
+const PATTERNS = [['mesh','Mesh gradient'],['waves','Waves'],['rings','Rings'],['dots','Halftone dots'],['terrazzo','Terrazzo'],['stripes','Stripes'],['photo','Photo']];
+const BLENDS = [['overlay','Overlay'],['multiply','Multiply'],['screen','Screen'],['soft-light','Soft light'],['hard-light','Hard light'],['color-dodge','Color dodge'],['color-burn','Color burn'],['difference','Difference'],['exclusion','Exclusion'],['hue','Hue'],['saturation','Saturation'],['color','Color'],['luminosity','Luminosity'],['source-over','Normal']];
+
+// brightness / contrast / highlight-compression via lookup table
+function tone(ctx, w, h) {
+  const br = $('brightness').value / 100, ct = $('contrast').value / 100, hl = $('highlights').value / 100;
+  if (!br && !ct && hl === 1) return;
+  const f = ct >= 0 ? 1 + ct * 2 : 1 + ct, lut = new Uint8ClampedArray(256);
+  for (let i = 0; i < 256; i++) {
+    let v = i / 255;
+    if (v > 0.6) v = 0.6 + (v - 0.6) * hl;
+    v = (v - 0.5) * f + 0.5 + br * 0.5;
+    lut[i] = v * 255;
+  }
+  const img = ctx.getImageData(0, 0, w, h), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
+  ctx.putImageData(img, 0, 0);
+}
+
+// ---------- layer list ----------
+const MAX_LAYERS = 8;
+const WARPS = [['wave', 'Waves'], ['ripple', 'Ripples'], ['swirl', 'Swirl'], ['turb', 'Turbulence'], ['lens', 'Lens (bulge / pinch)'], ['map', 'Layer map: push'], ['slope', 'Layer map: refract']];
+let nextUid = 0;
+const newLayer = (pattern, extra = {}) => ({
+  uid: nextUid++, pattern, visible: true, blend: 'overlay', opacity: 70,
+  fit: 'cover', px: 0, py: 0, zoom: 100, rot: 0,                       // photo
+  wtype: 'wave', src: null, strength: 40, scale: 30, wangle: 90, shift: 0,        // distort
+  ...extra,
+});
+state.layers = [newLayer('mesh', { opacity: 100 }), newLayer('waves')];
+
+const SLIDERS = {
+  photo: [['px', 'Position X', -100, 100], ['py', 'Position Y', -100, 100], ['zoom', 'Scale %', 10, 400], ['rot', 'Rotate °', -180, 180]],
+};
+const slider = (ly, k, label, min, max) => `<div class="lbl">${label} <span>${ly[k]}</span></div><input type="range" data-k="${k}" min="${min}" max="${max}" value="${ly[k]}">`;
+
+function layerBody(ly, i) {
+  const opts = (list, cur) => list.map(([v, n]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${n}</option>`).join('');
+  const pats = (i === 0 ? PATTERNS : [...PATTERNS, ['warp', 'Distort (warps layers below)']]);
+  let html = `<select data-k="pattern">${opts(pats, ly.pattern)}</select>`;
+  if (ly.pattern === 'warp') {
+    const map = ly.wtype === 'map' || ly.wtype === 'slope';
+    let srcSel = '', hint = 'Pushes everything beneath this layer around.';
+    if (map) {
+      const srcs = state.layers.map((l, j) => [l, j]).filter(([l]) => l.pattern !== 'warp');
+      if (!srcs.some(([l]) => l.uid === ly.src)) ly.src = srcs.length ? srcs[srcs.length - 1][0].uid : null;
+      srcSel = `<div class="lbl">Driven by</div><select data-k="src">${srcs.map(([l, j]) => `<option value="${l.uid}"${l.uid === ly.src ? ' selected' : ''}>Layer ${j + 1}: ${(PATTERNS.find(pp => pp[0] === l.pattern) || [0, l.pattern])[1]}${l.visible ? '' : ' (hidden)'}</option>`).join('')}</select>`;
+      hint = ly.wtype === 'map' ? 'The chosen layer\'s brightness pushes the image: light one way, dark the other.' : 'The chosen layer\'s edges and slopes bend the image, like looking through glass.';
+      hint += ' Tip: hide that layer with ◉ to use it only as a map.';
+    }
+    html += `<select data-k="wtype" style="margin-top:8px">${opts(WARPS, ly.wtype)}</select>
+      <div class="hint">${hint}</div>${srcSel}
+      ${slider(ly, 'strength', 'Strength', -100, 100)}
+      ${ly.wtype === 'map' ? '' : slider(ly, 'scale', ly.wtype === 'slope' ? 'Smoothness' : 'Scale', 1, 100)}
+      ${ly.wtype === 'wave' || ly.wtype === 'turb' || ly.wtype === 'map' ? slider(ly, 'wangle', 'Direction', 0, 180) : ''}
+      ${map ? '' : slider(ly, 'shift', 'Shift', 0, 100)}`;
+    return html;
+  }
+  if (ly.pattern === 'photo') {
+    html += `<div class="photo">
+      <button data-a="pick">${ly.img ? 'Replace photo…' : 'Choose photo…'}</button>
+      <input type="file" accept="image/*" hidden>
+      <select data-k="fit" title="How the photo fills the canvas">${opts([['cover', 'Fill'], ['contain', 'Fit inside'], ['stretch', 'Stretch']], ly.fit)}</select>
+      <small class="fname">${ly.name ? '' : 'No photo chosen'}</small></div>
+      ${SLIDERS.photo.map(([k, l, a, b]) => slider(ly, k, l, a, b)).join('')}
+      <button data-a="resetphoto" style="margin-top:8px;width:100%">Reset position</button>`;
+  }
+  if (i > 0) html += `<select data-k="blend" style="margin-top:8px">${opts(BLENDS, ly.blend)}</select>${slider(ly, 'opacity', 'Opacity', 0, 100)}`;
+  return html;
+}
+
+function buildLayers() {
+  const box = $('layers'), L = state.layers;
+  box.innerHTML = '';
+  L.forEach((ly, i) => {
+    const el = document.createElement('div');
+    el.className = 'layer' + (ly.visible ? '' : ' hidden-layer');
+    const warp = ly.pattern === 'warp';
+    el.innerHTML = `
+      <div class="head"><b>${i === 0 ? 'Base layer' : 'Layer ' + (i + 1)}</b>
+        <button data-a="vis" title="Show / hide">${ly.visible ? '◉' : '○'}</button>
+        <button data-a="up" title="Move down (toward base)" ${i === 0 || (warp && i === 1) ? 'disabled' : ''}>▲</button>
+        <button data-a="down" title="Move up (toward top)" ${i === L.length - 1 || (i === 0 && L[1].pattern === 'warp') ? 'disabled' : ''}>▼</button>
+        <button data-a="del" title="Remove layer" ${L.length === 1 || (i === 0 && L[1].pattern === 'warp') ? 'disabled' : ''}>✕</button></div>
+      ${layerBody(ly, i)}`;
+    el.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener('input', () => {
+      const k = inp.dataset.k;
+      ly[k] = inp.type === 'range' || k === 'src' ? +inp.value : inp.value;
+      if (inp.type === 'range') inp.previousElementSibling.querySelector('span').textContent = inp.value;
+      if (k === 'pattern' || k === 'wtype') buildLayers();
+      refresh();
+    }));
+    const fi = el.querySelector('input[type=file]');
+    if (fi) {
+      if (ly.name) el.querySelector('.fname').textContent = ly.name;
+      fi.addEventListener('change', () => loadPhoto(ly, fi.files[0]));
+    }
+    el.querySelectorAll('[data-a]').forEach(btn => btn.addEventListener('click', () => {
+      const a = btn.dataset.a;
+      if (a === 'pick') { fi.click(); return; }
+      if (a === 'resetphoto') Object.assign(ly, { px: 0, py: 0, zoom: 100, rot: 0 });
+      else if (a === 'vis') ly.visible = !ly.visible;
+      else if (a === 'del') L.splice(i, 1);
+      else { const j = a === 'up' ? i - 1 : i + 1; [L[i], L[j]] = [L[j], L[i]]; }
+      buildLayers(); refresh();
+    }));
+    box.appendChild(el);
+  });
+  const full = L.length >= MAX_LAYERS;
+  $('addLayer').disabled = $('addPhoto').disabled = $('addWarp').disabled = full;
+}
+
+function loadPhoto(ly, file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => { ly.img = img; ly.name = file.name; URL.revokeObjectURL(url); buildLayers(); refresh(); };
+  img.onerror = () => { URL.revokeObjectURL(url); status("Couldn't read that image"); };
+  img.src = url;
+}
+
+function drawPhoto(ctx, w, h, ly, base) {
+  if (base) { ctx.fillStyle = state.colors[0]; ctx.fillRect(0, 0, w, h); }
+  if (!ly.img) return;
+  const iw = ly.img.naturalWidth, ih = ly.img.naturalHeight;
+  ctx.save();
+  ctx.translate(w / 2 + ly.px / 100 * w, h / 2 + ly.py / 100 * h);
+  ctx.rotate(ly.rot * Math.PI / 180);
+  const z = ly.zoom / 100;
+  if (ly.fit === 'stretch') ctx.drawImage(ly.img, -w * z / 2, -h * z / 2, w * z, h * z);
+  else {
+    const k = (ly.fit === 'contain' ? Math.min : Math.max)(w / iw, h / ih) * z;
+    ctx.drawImage(ly.img, -iw * k / 2, -ih * k / 2, iw * k, ih * k);
+  }
+  ctx.restore();
+}
+
+// ---------- distortion ----------
+function hash2(ix, iy, seed) {
+  let h = Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + Math.imul(seed, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+function vnoise(x, y, seed) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  const a = hash2(ix, iy, seed), b = hash2(ix + 1, iy, seed), c = hash2(ix, iy + 1, seed), d = hash2(ix + 1, iy + 1, seed);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+function warp(ctx, w, h, ly, seed, lum) {
+  const src = ctx.getImageData(0, 0, w, h), s = src.data;
+  const out = ctx.createImageData(w, h), o = out.data;
+  const m = Math.min(w, h), r = rng(seed), cx = (0.3 + 0.4 * r()) * w, cy = (0.3 + 0.4 * r()) * h;
+  const nseed = Math.floor(r() * 1e6);
+  const k = ly.strength / 100, A = k * 0.12 * m;
+  const cycles = 0.8 + ly.scale / 100 * 12, f = Math.PI * 2 * cycles / m;
+  const ph = ly.shift / 100 * Math.PI * 2, ang = ly.wangle * Math.PI / 180;
+  const ux = Math.cos(ang), uy = Math.sin(ang), type = ly.wtype;
+  const R = m * (0.25 + ly.scale / 100 * 0.6);
+  const W1 = w - 1, H1 = h - 1;
+  const sample = (sx, sy, idx) => {
+    if (sx < 0) sx = 0; else if (sx > W1) sx = W1;
+    if (sy < 0) sy = 0; else if (sy > H1) sy = H1;
+    const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0;
+    const i00 = (y0 * w + x0) << 2, i10 = x0 < W1 ? i00 + 4 : i00, i01 = y0 < H1 ? i00 + (w << 2) : i00, i11 = x0 < W1 ? i01 + 4 : i01;
+    const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+    o[idx] = s[i00] * w00 + s[i10] * w10 + s[i01] * w01 + s[i11] * w11;
+    o[idx + 1] = s[i00 + 1] * w00 + s[i10 + 1] * w10 + s[i01 + 1] * w01 + s[i11 + 1] * w11;
+    o[idx + 2] = s[i00 + 2] * w00 + s[i10 + 2] * w10 + s[i01 + 2] * w01 + s[i11 + 2] * w11;
+    o[idx + 3] = s[i00 + 3] * w00 + s[i10 + 3] * w10 + s[i01 + 3] * w01 + s[i11 + 3] * w11;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sx = x, sy = y;
+      if (type === 'map') {
+        const off = (lum[y * w + x] - 0.5) * 2 * k * 0.15 * m;
+        sx += ux * off; sy += uy * off;
+      } else if (type === 'slope') {
+        const st = 1 + Math.round(ly.scale / 100 * m * 0.02);
+        const xa = x - st < 0 ? 0 : x - st, xb = x + st > W1 ? W1 : x + st, ya = y - st < 0 ? 0 : y - st, yb = y + st > H1 ? H1 : y + st;
+        sx += k * m * 0.2 * (lum[y * w + xb] - lum[y * w + xa]) * (st * 2) / (xb - xa || 1);
+        sy += k * m * 0.2 * (lum[yb * w + x] - lum[ya * w + x]) * (st * 2) / (yb - ya || 1);
+      } else if (type === 'wave') {
+        const t = x * ux + y * uy, off = A * (Math.sin(t * f + ph) + 0.4 * Math.sin(t * f * 2.3 + ph * 1.7));
+        sx += -uy * off; sy += ux * off;
+      } else if (type === 'ripple') {
+        const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1, off = A * 0.7 * Math.sin(d * f * 1.5 + ph);
+        sx += dx / d * off; sy += dy / d * off;
+      } else if (type === 'swirl') {
+        const dx = x - cx, dy = y - cy, d2 = (dx * dx + dy * dy) / (R * R), a = k * Math.PI * 3 * Math.exp(-d2) , ca = Math.cos(a), sa = Math.sin(a);
+        sx = cx + dx * ca - dy * sa; sy = cy + dx * sa + dy * ca;
+      } else if (type === 'turb') {
+        const nf = cycles / m * 0.6, nx = x * nf + ph * 3, ny = y * nf + ph * 2;
+        const n1 = vnoise(nx, ny, nseed) + 0.5 * vnoise(nx * 2.1, ny * 2.1, nseed) - 0.75;
+        const n2 = vnoise(nx + 41.3, ny + 17.9, nseed + 1) + 0.5 * vnoise(nx * 2.1 + 9, ny * 2.1 + 5, nseed + 1) - 0.75;
+        sx += A * 2.2 * n1; sy += A * 2.2 * n2;
+      } else if (type === 'lens') {
+        const dx = x - cx, dy = y - cy, d2 = (dx * dx + dy * dy) / (R * R);
+        if (d2 < 1) { const fac = 1 - k * (1 - d2); sx = cx + dx * fac; sy = cy + dy * fac; }
+      }
+      sample(sx, sy, (y * w + x) * 4);
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+$('addPhoto').addEventListener('click', () => {
+  if (state.layers.length >= MAX_LAYERS) return;
+  state.layers.push(newLayer('photo', { opacity: 100 }));
+  buildLayers(); refresh();
+  $('layers').lastElementChild.querySelector('input[type=file]').click();
+});
+$('addWarp').addEventListener('click', () => {
+  if (state.layers.length >= MAX_LAYERS) return;
+  state.layers.push(newLayer('warp'));
+  buildLayers(); refresh();
+});
+$('addLayer').addEventListener('click', () => {
+  const L = state.layers;
+  if (L.length >= MAX_LAYERS) return;
+  const uid = nextUid;
+  L.push(newLayer(PATTERNS[uid % (PATTERNS.length - 1)][0]));
+  buildLayers(); refresh();
+});
+
+function render(canvas, w, h) {
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const P = {
+    colors: state.colors,
+    complexity: +$('complexity').value, softness: +$('softness').value,
+    grain: +$('grain').value, angle: +$('angle').value,
+  };
+  ctx.globalAlpha = 1;
+  const paintLayer = (ly, i, c) => {
+    const sh = (ly.uid * 2) % 5;
+    const P2 = { ...P, colors: [...P.colors.slice(sh), ...P.colors.slice(0, sh)], angle: (P.angle + 60 * ly.uid) % 180 };
+    if (ly.pattern === 'photo') drawPhoto(c, w, h, ly, i === 0);
+    else DRAW[ly.pattern](c, w, h, P2, rng(state.seed + 7919 * ly.uid));
+  };
+  // brightness (0-1) of another layer, rendered on its own, to drive a map distortion
+  const lumOf = ly => {
+    const si = state.layers.findIndex(l => l.uid === ly.src && l.pattern !== 'warp');
+    if (si < 0) return null;
+    const t = document.createElement('canvas'); t.width = w; t.height = h;
+    const tc = t.getContext('2d'); paintLayer(state.layers[si], si, tc);
+    const d = tc.getImageData(0, 0, w, h).data, out = new Float32Array(w * h);
+    for (let p = 0, q = 0; p < out.length; p++, q += 4) {
+      const a = d[q + 3] / 255;
+      out[p] = ((0.299 * d[q] + 0.587 * d[q + 1] + 0.114 * d[q + 2]) / 255) * a + 0.5 * (1 - a);
+    }
+    return out;
+  };
+  state.layers.forEach((ly, i) => {
+    if (!ly.visible) return;
+    if (ly.pattern === 'warp') {
+      if (i === 0 || !ly.strength) return;
+      const map = ly.wtype === 'map' || ly.wtype === 'slope';
+      const lum = map ? lumOf(ly) : null;
+      if (map && !lum) return;
+      warp(ctx, w, h, ly, state.seed + 31 * ly.uid, lum);
+      return;
+    }
+    if (i > 0 && ly.opacity <= 0) return;
+    if (i === 0) { paintLayer(ly, i, ctx); return; }
+    const layer = document.createElement('canvas'); layer.width = w; layer.height = h;
+    paintLayer(ly, i, layer.getContext('2d'));
+    ctx.save();
+    ctx.globalCompositeOperation = ly.blend; ctx.globalAlpha = ly.opacity / 100;
+    ctx.drawImage(layer, 0, 0);
+    ctx.restore();
+  });
+  ctx.globalAlpha = 1;
+  tone(ctx, w, h);
+  if (P.grain > 0) {
+    const pat = ctx.createPattern(getGrainTile(), 'repeat');
+    const sc = Math.max(1, Math.min(w, h) / 900);
+    ctx.save(); ctx.scale(sc, sc);
+    ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = P.grain / 100 * 0.6;
+    ctx.fillStyle = pat; ctx.fillRect(0, 0, w / sc, h / sc);
+    ctx.restore();
+  }
+}
+
+// ---------- UI ----------
+function getSize() {
+  if ($('size').value === 'custom') {
+    return [Math.max(64, Math.min(8000, +$('cw').value || 1920)), Math.max(64, Math.min(8000, +$('ch').value || 1080))];
+  }
+  return $('size').value.split('x').map(Number);
+}
+
+function refresh() {
+  const [w, h] = getSize(), warped = state.layers.some(l => l.pattern === 'warp' && l.visible);
+  const k = Math.min(1, (warped ? 900 : 1400) / Math.max(w, h));
+  render(view, Math.round(w * k), Math.round(h * k));
+  view.style.aspectRatio = `${w} / ${h}`;
+  for (const id of ['complexity', 'softness', 'grain', 'angle', 'brightness', 'contrast', 'highlights']) $('v-' + id).textContent = $(id).value;
+  $('v-seed').textContent = '#' + state.seed;
+}
+
+function buildSwatches() {
+  const box = $('swatches'); box.innerHTML = '';
+  state.colors.forEach((col, i) => {
+    const inp = document.createElement('input'); inp.type = 'color'; inp.value = col;
+    inp.addEventListener('input', () => { state.colors[i] = inp.value; $('palette').value = ''; refresh(); });
+    box.appendChild(inp);
+  });
+}
+
+function randomColors() {
+  const r = Math.random, hue = r() * 360, out = [];
+  const scheme = [0, 30, 150, 180, 210, 300][Math.floor(r() * 6)];
+  for (let i = 0; i < 5; i++) {
+    const hh = (hue + (i % 2 ? scheme : 0) + (r() - .5) * 30 + 360) % 360, s = 0.45 + r() * 0.45, l = 0.2 + i * 0.15 + r() * 0.08;
+    out.push(hsl(hh, s, Math.min(.92, l)));
+  }
+  return r() < .5 ? out : out.reverse();
+}
+function hsl(h, s, l) {
+  const a = s * Math.min(l, 1 - l), f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+
+const palSel = $('palette');
+palSel.innerHTML = '<option value="">Custom</option>' + Object.keys(PALETTES).map(n => `<option>${n}</option>`).join('');
+palSel.value = 'Sunset';
+palSel.addEventListener('change', () => { if (PALETTES[palSel.value]) { state.colors = [...PALETTES[palSel.value]]; buildSwatches(); refresh(); } });
+
+for (const id of ['brightness', 'contrast', 'highlights', 'complexity', 'softness', 'grain', 'angle', 'cw', 'ch']) $(id).addEventListener('input', refresh);
+$('size').addEventListener('change', () => { $('customSize').style.display = $('size').value === 'custom' ? 'flex' : 'none'; refresh(); });
+$('shuffle').addEventListener('click', () => { state.seed = Math.floor(Math.random() * 99999) + 1; refresh(); });
+$('shufflePal').addEventListener('click', () => { state.colors = randomColors(); palSel.value = ''; buildSwatches(); refresh(); });
+
+// ---------- export ----------
+const status = msg => $('status').textContent = msg;
+const fileBase = () => `backdrop-${state.layers[0].pattern}-${state.seed}`;
+
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function fullCanvas() { const [w, h] = getSize(); const c = document.createElement('canvas'); render(c, w, h); return c; }
+
+$('png').addEventListener('click', () => {
+  status('Rendering…');
+  setTimeout(() => {
+    const c = fullCanvas();
+    c.toBlob(b => { download(b, fileBase() + '.png'); status(`Saved ${c.width}×${c.height} PNG`); }, 'image/png');
+  }, 20);
+});
+
+// Minimal PDF writer: one page, sized to the image, JPEG (DCT) embedded.
+$('pdf').addEventListener('click', () => {
+  status('Rendering…');
+  setTimeout(() => {
+    const c = fullCanvas();
+    c.toBlob(async jb => {
+      const jpg = new Uint8Array(await jb.arrayBuffer());
+      const enc = new TextEncoder(), parts = [], offs = [];
+      let len = 0;
+      const push = d => { const u = typeof d === 'string' ? enc.encode(d) : d; parts.push(u); len += u.length; };
+      const W = (c.width * 0.75).toFixed(2), H = (c.height * 0.75).toFixed(2); // px → pt @96dpi
+      const content = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+      push('%PDF-1.4\n');
+      const obj = (n, body) => { offs[n] = len; push(`${n} 0 obj\n${body}\nendobj\n`); };
+      obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+      obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+      obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+      offs[4] = len;
+      push(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${c.width} /Height ${c.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
+      push(jpg); push('\nendstream\nendobj\n');
+      obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+      const xref = len;
+      push('xref\n0 6\n0000000000 65535 f \n');
+      for (let i = 1; i <= 5; i++) push(String(offs[i]).padStart(10, '0') + ' 00000 n \n');
+      push(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+      download(new Blob(parts, { type: 'application/pdf' }), fileBase() + '.pdf');
+      status(`Saved ${c.width}×${c.height} PDF`);
+    }, 'image/jpeg', 0.95);
+  }, 20);
+});
+
+// ---------- blend guide ----------
+const CASTLE = 'data:image/jpeg;base64,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';
+const BLEND_INFO = {
+  'source-over': ['Normal', 'No blending. The top layer simply covers what is below; only opacity lets the layer beneath show through.'],
+  multiply: ['Multiply', 'Always darkens. White has no effect, black stays black. Great for shadows and rich, deep tints.'],
+  screen: ['Screen', 'The opposite of Multiply: always lightens. Black has no effect. Good for glows and light leaks.'],
+  overlay: ['Overlay', 'Darks get multiplied and lights get screened, based on the layer below. Boosts contrast and color while keeping the base tones.'],
+  'soft-light': ['Soft light', 'A gentler Overlay. Adds a subtle wash of color and contrast without harsh results.'],
+  'hard-light': ['Hard light', 'Like Overlay, but driven by the top layer instead. Punchy and strong, with a lot of color.'],
+  'color-dodge': ['Color dodge', 'Brightens the base dramatically and blows out the highlights. Neon, glowy looks.'],
+  'color-burn': ['Color burn', 'Deepens and saturates the darks. Intense, moody, high-drama.'],
+  difference: ['Difference', 'Subtracts one layer from the other, flipping colors where the top is bright. Psychedelic, inverted looks.'],
+  exclusion: ['Exclusion', 'Like Difference but softer and lower in contrast. Pastel, washed-out inversions.'],
+  hue: ['Hue', 'Takes only the hue of the top layer. Keeps the base brightness and saturation.'],
+  saturation: ['Saturation', 'Takes only how vivid the top layer is, and keeps the base hue and brightness. Use a gray layer to desaturate.'],
+  color: ['Color', 'Takes hue and saturation from the top and keeps the base brightness. The classic way to tint a picture.'],
+  luminosity: ['Luminosity', 'Takes only the brightness of the top layer and keeps the base colors. Best with textured layers; a flat color just sets the lightness.'],
+};
+const BOLD = '#ff1f6b';
+function drawCover(ctx, img, W, H) {
+  const k = Math.max(W / img.width, H / img.height), dw = img.width * k, dh = img.height * k;
+  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+}
+let guideBuilt = false;
+function buildGuide() {
+  if (guideBuilt) return; guideBuilt = true;
+  const img = new Image();
+  img.onload = () => {
+    drawCover($('ex-orig').getContext('2d'), img, 200, 130);
+    const grid = $('exGrid');
+    for (const [mode, [name, text]] of Object.entries(BLEND_INFO)) {
+      const card = document.createElement('div'); card.className = 'card';
+      card.innerHTML = '<canvas width="400" height="260"></canvas><h3></h3><p></p>';
+      card.querySelector('h3').textContent = name; card.querySelector('p').textContent = text;
+      const c = card.querySelector('canvas').getContext('2d');
+      drawCover(c, img, 400, 260);
+      c.globalCompositeOperation = mode; c.fillStyle = BOLD; c.fillRect(0, 0, 400, 260);
+      grid.appendChild(card);
+    }
+  };
+  img.src = CASTLE;
+}
+const openGuide = e => { e && e.preventDefault(); buildGuide(); $('modal').hidden = false; };
+$('help').addEventListener('click', openGuide);
+$('help2').addEventListener('click', openGuide);
+$('closeModal').addEventListener('click', () => $('modal').hidden = true);
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) $('modal').hidden = true; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').hidden = true; });
+
+buildLayers();
+buildSwatches();
+state.seed = Math.floor(Math.random() * 99999) + 1;
+refresh();
+window.addEventListener('resize', () => {});
+</script>
+<div id="lt-version-tag" style="position:fixed;bottom:6px;right:8px;font-family:system-ui,-apple-system,sans-serif;font-size:10px;letter-spacing:0.02em;color:rgba(128,128,128,0.65);pointer-events:none;user-select:none;z-index:2147483647;">v2026.11.01</div>
+</body>
+</html>
