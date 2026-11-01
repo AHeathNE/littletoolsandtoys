@@ -182,6 +182,7 @@
                             <li><button class="nav-btn" data-target="img-enlg" onclick="changeText18()">Enlarger</button></li>
                             <li><button class="nav-btn" data-target="img-gsfl" onclick="changeText21()">Grid Shuffler</button></li>
                             <li><button class="nav-btn" data-target="img-txtr" onclick="changeText38()">Backdrop</button></li>
+                            <li><button class="nav-btn" data-target="img-bmpr" onclick="changeText39()">Bitmapper</button></li>
                         </ul>
 
                         <!-- Description text, now beside the buttons instead of above the window -->
@@ -294,6 +295,7 @@
             <img id="img-t3d" src="images/t3d.png" alt="Preview of the 3D Text GIF tool">
             <img id="img-vdrw" src="images/vdrw.png" alt="Preview of the Vector Draw tool">
             <img id="img-txtr" src="images/txtr.png" alt="Preview of the Backdrop texture generator">
+            <img id="img-bmpr" src="images/bmpr.png" alt="Halftone dot bitmap of Painting">
         </div>
     </div>
 
@@ -463,6 +465,9 @@
         }
         function changeText38() {
             setToolText('See how Backdrop works: <a href="texture-generator.html" target="_blank">View Backdrop</a>');
+        }
+        function changeText39() {
+            setToolText('Bitmapper turns images, GIFs, PDFs, short videos and text into dithered bitmaps, with 23 methods and savable presets: <a href="bitmapper.html" target="_blank">View Bitmapper</a>');
         }
         function changeText36() {
             setToolText('See how Vector Draw works: <a href="vector-draw.html" target="_blank">View Vector Draw</a>');
